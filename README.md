@@ -19,9 +19,7 @@ This repo benchmarks `faster-whisper`, `mlx-whisper`, `mlx-audio`, `lightning-wh
 Create a Python virtual environment and install dependencies with `uv`:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install uv
-/opt/homebrew/bin/uv pip install -r requirements.txt
+/opt/homebrew/bin/uv sync
 ```
 
 `mlx-whisper` requires Apple Silicon and MLX. On macOS you will also usually want `ffmpeg` installed:
@@ -103,22 +101,6 @@ Score against a ground-truth transcript:
   --reference-transcript /path/to/reference.txt
 ```
 
-Ignore case and punctuation differences during WER/CER scoring:
-
-```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
-  --reference-transcript /path/to/reference.txt \
-  --score-normalization basic
-```
-
-Use Whisper's English normalization for WER/CER reporting that matches common Whisper evaluations:
-
-```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
-  --reference-transcript /path/to/reference.txt \
-  --score-normalization whisper-english
-```
-
 Use a different `faster-whisper` compute type:
 
 ```bash
@@ -144,7 +126,7 @@ mlx-whisper     tiny       3/3   0.987         0.981            0.123        0.8
 ```
 
 When `--reference-transcript` is provided, the summary also includes `avg_wer` and `avg_cer`.
-`--score-normalization raw` keeps literal scoring. `--score-normalization basic` lowercases text and strips punctuation before WER/CER scoring. `--score-normalization whisper-english` uses `openai-whisper`'s `EnglishTextNormalizer`, which is the standard normalization used in Whisper English WER reporting.
+WER and CER are computed with `jiwer` after a single fixed multilingual-safe normalization step: Unicode NFKC normalization plus whitespace collapsing.
 
 It also writes:
 

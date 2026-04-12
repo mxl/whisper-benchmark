@@ -1,6 +1,0 @@
-faster-whisper>=1.1.0
-mlx-whisper>=0.4.3
-mlx-audio>=0.4.2
-lightning-whisper-mlx>=0.0.10
-insanely-fast-whisper>=0.0.15
-openai-whisper>=20250625

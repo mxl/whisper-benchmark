@@ -6,7 +6,6 @@ import argparse
 import csv
 import json
 import platform
-import re
 import subprocess
 import statistics
 import sys
@@ -15,6 +14,7 @@ import traceback
 import unicodedata
 from dataclasses import asdict, dataclass
 from huggingface_hub import snapshot_download
+import jiwer
 from pathlib import Path
 from typing import Any
 
@@ -203,16 +203,6 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to a ground-truth transcript for WER/CER scoring.",
     )
     parser.add_argument(
-        "--score-normalization",
-        choices=["raw", "basic", "whisper-english"],
-        default="raw",
-        help=(
-            "Normalization applied before WER/CER scoring. "
-            "'whisper-english' uses openai-whisper's EnglishTextNormalizer, "
-            "which is the standard for Whisper WER reporting."
-        ),
-    )
-    parser.add_argument(
         "--warmup",
         action="store_true",
         help="Run one untimed transcription warmup per backend/model before timed runs.",
@@ -270,35 +260,7 @@ def normalize_transcript(text: str) -> str:
     return " ".join(normalized.split()).strip()
 
 
-_WHISPER_ENGLISH_NORMALIZER = None
-
-
-def _get_whisper_english_normalizer():
-    global _WHISPER_ENGLISH_NORMALIZER
-    if _WHISPER_ENGLISH_NORMALIZER is None:
-        from whisper.normalizers import EnglishTextNormalizer
-
-        _WHISPER_ENGLISH_NORMALIZER = EnglishTextNormalizer()
-    return _WHISPER_ENGLISH_NORMALIZER
-
-
-def normalize_for_scoring(text: str, mode: str) -> str:
-    normalized = normalize_transcript(text)
-    if mode == "raw":
-        return normalized
-    if mode == "basic":
-        normalized = normalized.lower()
-        normalized = re.sub(r"[^\w\s]", " ", normalized, flags=re.UNICODE)
-        return " ".join(normalized.split()).strip()
-    if mode == "whisper-english":
-        normalizer = _get_whisper_english_normalizer()
-        return " ".join(normalizer(normalized).split()).strip()
-    raise ValueError(f"Unsupported score normalization mode: {mode}")
-
-
-def load_reference_transcript(
-    reference_path: Path | None, normalization_mode: str
-) -> str | None:
+def load_reference_transcript(reference_path: Path | None) -> str | None:
     if reference_path is None:
         return None
     if not reference_path.exists():
@@ -307,59 +269,23 @@ def load_reference_transcript(
         )
     if not reference_path.is_file():
         raise ValueError(f"Reference transcript is not a file: {reference_path}")
-    return normalize_for_scoring(
-        reference_path.read_text(encoding="utf-8"), normalization_mode
-    )
-
-
-def levenshtein_distance(left: list[str], right: list[str]) -> int:
-    if not left:
-        return len(right)
-    if not right:
-        return len(left)
-
-    previous = list(range(len(right) + 1))
-    for i, left_item in enumerate(left, start=1):
-        current = [i]
-        for j, right_item in enumerate(right, start=1):
-            cost = 0 if left_item == right_item else 1
-            current.append(
-                min(
-                    previous[j] + 1,
-                    current[j - 1] + 1,
-                    previous[j - 1] + cost,
-                )
-            )
-        previous = current
-    return previous[-1]
+    return normalize_transcript(reference_path.read_text(encoding="utf-8"))
 
 
 def compute_word_error_rate(reference: str, hypothesis: str) -> float:
-    reference_words = reference.split()
-    hypothesis_words = hypothesis.split()
-    if not reference_words:
-        return 0.0 if not hypothesis_words else 1.0
-    return levenshtein_distance(reference_words, hypothesis_words) / len(
-        reference_words
-    )
+    return jiwer.wer(reference, hypothesis)
 
 
 def compute_character_error_rate(reference: str, hypothesis: str) -> float:
-    reference_chars = list(reference)
-    hypothesis_chars = list(hypothesis)
-    if not reference_chars:
-        return 0.0 if not hypothesis_chars else 1.0
-    return levenshtein_distance(reference_chars, hypothesis_chars) / len(
-        reference_chars
-    )
+    return jiwer.cer(reference, hypothesis)
 
 
 def score_transcript(
-    transcript: str, reference_transcript: str | None, normalization_mode: str
+    transcript: str, reference_transcript: str | None
 ) -> tuple[float | None, float | None]:
     if reference_transcript is None:
         return None, None
-    normalized_transcript = normalize_for_scoring(transcript, normalization_mode)
+    normalized_transcript = normalize_transcript(transcript)
     return (
         compute_word_error_rate(reference_transcript, normalized_transcript),
         compute_character_error_rate(reference_transcript, normalized_transcript),
@@ -391,13 +317,13 @@ def run_faster_whisper(
         vad_filter=args.faster_whisper_vad_filter,
         condition_on_previous_text=args.condition_on_previous_text,
     )
+    # faster-whisper yields segments lazily, so timing must include iteration.
     transcript = "".join(segment.text for segment in segments).strip()
     transcribe_seconds = time.perf_counter() - transcribe_started
     chars, words = summarize_text(transcript)
     wer, cer = score_transcript(
         transcript,
         args.reference_transcript_text,
-        args.score_normalization,
     )
 
     return RunResult(
@@ -455,7 +381,6 @@ def run_mlx_whisper(
     wer, cer = score_transcript(
         transcript,
         args.reference_transcript_text,
-        args.score_normalization,
     )
 
     return RunResult(
@@ -530,7 +455,6 @@ def run_insanely_fast_whisper(
     wer, cer = score_transcript(
         transcript,
         args.reference_transcript_text,
-        args.score_normalization,
     )
 
     return RunResult(
@@ -584,7 +508,6 @@ def run_mlx_audio(
     wer, cer = score_transcript(
         transcript,
         args.reference_transcript_text,
-        args.score_normalization,
     )
     detected_language = getattr(result, "language", None)
     if detected_language is None and isinstance(result, dict):
@@ -650,7 +573,6 @@ def run_lightning_whisper_mlx(
     wer, cer = score_transcript(
         transcript,
         args.reference_transcript_text,
-        args.score_normalization,
     )
 
     return RunResult(
@@ -746,7 +668,6 @@ def run_openai_whisper(
     wer, cer = score_transcript(
         transcript,
         args.reference_transcript_text,
-        args.score_normalization,
     )
 
     return RunResult(
@@ -975,7 +896,6 @@ def build_metadata(args: argparse.Namespace, audio_path: Path) -> dict[str, Any]
         "reference_transcript": str(args.reference_transcript)
         if args.reference_transcript is not None
         else None,
-        "score_normalization": args.score_normalization,
         "beam_size": args.beam_size,
         "compute_type": args.compute_type,
         "device": args.device,
@@ -1000,8 +920,7 @@ def main() -> int:
     args = parse_args()
     audio_path = ensure_audio_file(args.audio)
     args.reference_transcript_text = load_reference_transcript(
-        args.reference_transcript,
-        args.score_normalization,
+        args.reference_transcript
     )
 
     results: list[RunResult] = []
