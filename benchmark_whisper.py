@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 import platform
+import re
 import subprocess
 import statistics
 import sys
@@ -262,7 +263,8 @@ def summarize_text(text: str) -> tuple[int, int]:
 
 
 def normalize_transcript(text: str) -> str:
-    normalized = unicodedata.normalize("NFKC", text)
+    normalized = unicodedata.normalize("NFKC", text).lower()
+    normalized = re.sub(r"[^\w\s]", " ", normalized)
     return " ".join(normalized.split()).strip()
 
 

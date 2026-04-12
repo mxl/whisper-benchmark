@@ -126,7 +126,7 @@ mlx-whisper     tiny       3/3   0.987         0.981            0.123        0.8
 ```
 
 When `--reference-transcript` is provided, the summary also includes `avg_wer` and `avg_cer`.
-WER and CER are computed with `jiwer` after a single fixed multilingual-safe normalization step: Unicode NFKC normalization plus whitespace collapsing.
+WER and CER are computed with `jiwer` after a fixed multilingual-safe normalization step: Unicode NFKC normalization, lowercasing, punctuation removal, and whitespace collapsing.
 
 It also writes:
 
