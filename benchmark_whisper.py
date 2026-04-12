@@ -666,11 +666,12 @@ def load_backend_session(
         generate_kwargs = {"task": args.task, "language": args.language or None}
         if model_repo.endswith(".en"):
             generate_kwargs.pop("task")
+
         load_started = time.perf_counter()
         pipe = pipeline(
             "automatic-speech-recognition",
             model=model_repo,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device=device,
             model_kwargs={"attn_implementation": attn},
         )
