@@ -217,11 +217,6 @@ def parse_args() -> argparse.Namespace:
         help="Run one untimed transcription warmup per backend/model before timed runs.",
     )
     parser.add_argument(
-        "--insanely-fast-whisper-binary",
-        default="insanely-fast-whisper",
-        help="Path to the insanely-fast-whisper CLI binary.",
-    )
-    parser.add_argument(
         "--insanely-fast-whisper-device-id",
         default="mps",
         help='Device id passed to insanely-fast-whisper. Use "mps" on Apple Silicon.',
