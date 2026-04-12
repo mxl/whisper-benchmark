@@ -27,7 +27,7 @@ OPENAI_WHISPER_REPOS = {
     "base": "base",
     "small": "small",
     "medium": "medium",
-    "large-v3": "large",
+    "large-v3": "large-v3",
     "large-v3-turbo": "turbo",
 }
 MLX_AUDIO_WHISPER_REPOS = {
