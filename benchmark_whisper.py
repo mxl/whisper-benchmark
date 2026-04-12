@@ -845,6 +845,7 @@ def aggregate_results(
                 "max_total_seconds": max(total_values) if total_values else None,
                 "avg_load_seconds": mean_or_none(load_values),
                 "avg_transcribe_seconds": mean_or_none(transcribe_values),
+                "stddev_transcribe_seconds": stdev_or_none(transcribe_values),
                 "avg_rtf": (
                     mean_or_none(transcribe_values) / audio_duration_seconds
                     if transcribe_values and audio_duration_seconds > 0
@@ -880,6 +881,10 @@ def median_or_none(values: list[float]) -> float | None:
     return statistics.median(values) if values else None
 
 
+def stdev_or_none(values: list[float]) -> float | None:
+    return statistics.stdev(values) if len(values) > 1 else None
+
+
 def print_summary(aggregated: list[dict[str, Any]]) -> None:
     headers = [
         "backend",
@@ -889,6 +894,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
         "median_total_s",
         "avg_load_s",
         "avg_transcribe_s",
+        "stddev_transcribe_s",
         "avg_rtf",
         "avg_wer",
         "avg_cer",
@@ -904,6 +910,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
                 format_float(row["median_total_seconds"]),
                 format_float(row["avg_load_seconds"]),
                 format_float(row["avg_transcribe_seconds"]),
+                format_float(row["stddev_transcribe_seconds"]),
                 format_float(row["avg_rtf"]),
                 format_float(row["avg_wer"]),
                 format_float(row["avg_cer"]),
@@ -928,6 +935,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
     print("median_total_s: median end-to-end runtime in seconds")
     print("avg_load_s: average model load time in seconds when measurable")
     print("avg_transcribe_s: average transcription time in seconds")
+    print("stddev_transcribe_s: standard deviation of transcription time in seconds")
     print("avg_rtf: average real-time factor (transcribe_s / audio_duration_s)")
     print("avg_wer: average word error rate against the reference transcript")
     print("avg_cer: average character error rate against the reference transcript")
