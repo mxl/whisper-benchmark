@@ -87,7 +87,7 @@ class BackendSession:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark faster-whisper vs mlx-whisper across multiple Whisper model sizes."
+        description="Benchmark multiple Whisper backends across multiple model sizes."
     )
     parser.add_argument("audio", type=Path, help="Path to an input audio file.")
     parser.add_argument(
