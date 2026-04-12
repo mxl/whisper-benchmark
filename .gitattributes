@@ -1,0 +1,6 @@
+samples/*.ogg filter=lfs diff=lfs merge=lfs -text
+samples/*.m4a filter=lfs diff=lfs merge=lfs -text
+samples/*.mp4 filter=lfs diff=lfs merge=lfs -text
+samples/*.wav filter=lfs diff=lfs merge=lfs -text
+samples/*.flac filter=lfs diff=lfs merge=lfs -text
+samples/*.mp3 filter=lfs diff=lfs merge=lfs -text
