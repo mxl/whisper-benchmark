@@ -7,7 +7,11 @@ import sys
 
 from huggingface_hub import snapshot_download
 
-from benchmark_whisper import DEFAULT_MODELS
+from benchmark_whisper import (
+    DEFAULT_MODELS,
+    INSANELY_FAST_WHISPER_REPOS,
+    MLX_AUDIO_WHISPER_REPOS,
+)
 
 
 FASTER_WHISPER_REPOS = {
@@ -28,15 +32,6 @@ OPENAI_WHISPER_MODELS = {
     "large-v3-turbo": "large-v3-turbo",
 }
 
-INSANELY_FAST_WHISPER_REPOS = {
-    "tiny": "openai/whisper-tiny",
-    "base": "openai/whisper-base",
-    "small": "openai/whisper-small",
-    "medium": "openai/whisper-medium",
-    "large-v3": "openai/whisper-large-v3",
-    "large-v3-turbo": "openai/whisper-large-v3-turbo",
-}
-
 MLX_WHISPER_REPOS = {
     "tiny": "mlx-community/whisper-tiny-mlx",
     "base": "mlx-community/whisper-base-mlx",
@@ -44,15 +39,6 @@ MLX_WHISPER_REPOS = {
     "medium": "mlx-community/whisper-medium-mlx",
     "large-v3": "mlx-community/whisper-large-v3-mlx",
     "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
-}
-
-MLX_AUDIO_WHISPER_REPOS = {
-    "tiny": "mlx-community/whisper-tiny-asr-fp16",
-    "base": "mlx-community/whisper-base-asr-fp16",
-    "small": "mlx-community/whisper-small-asr-fp16",
-    "medium": "mlx-community/whisper-medium-asr-fp16",
-    "large-v3": "mlx-community/whisper-large-v3-asr-fp16",
-    "large-v3-turbo": "mlx-community/whisper-large-v3-turbo-asr-fp16",
 }
 
 
