@@ -280,6 +280,30 @@ def load_reference_transcript(reference_path: Path | None) -> str | None:
     return normalize_transcript(reference_path.read_text(encoding="utf-8"))
 
 
+def get_audio_duration_seconds(audio_path: Path) -> float:
+    import wave
+
+    if audio_path.suffix.lower() == ".wav":
+        with wave.open(str(audio_path), "rb") as handle:
+            frames = handle.getnframes()
+            sample_rate = handle.getframerate()
+        if sample_rate <= 0:
+            raise ValueError(f"Invalid WAV sample rate in {audio_path}")
+        return frames / sample_rate
+
+    try:
+        import soundfile as sf
+
+        info = sf.info(str(audio_path))
+        if info.samplerate <= 0:
+            raise ValueError(f"Invalid sample rate in {audio_path}")
+        return info.frames / info.samplerate
+    except ImportError as exc:
+        raise RuntimeError(
+            "soundfile is required to compute audio duration for non-WAV files"
+        ) from exc
+
+
 def compute_word_error_rate(reference: str, hypothesis: str) -> float:
     return jiwer.wer(reference, hypothesis)
 
@@ -780,7 +804,9 @@ def maybe_warmup(
         )
 
 
-def aggregate_results(results: list[RunResult]) -> list[dict[str, Any]]:
+def aggregate_results(
+    results: list[RunResult], audio_duration_seconds: float
+) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], list[RunResult]] = {}
     for result in results:
         grouped.setdefault((result.backend, result.model), []).append(result)
@@ -819,6 +845,11 @@ def aggregate_results(results: list[RunResult]) -> list[dict[str, Any]]:
                 "max_total_seconds": max(total_values) if total_values else None,
                 "avg_load_seconds": mean_or_none(load_values),
                 "avg_transcribe_seconds": mean_or_none(transcribe_values),
+                "avg_rtf": (
+                    mean_or_none(transcribe_values) / audio_duration_seconds
+                    if transcribe_values and audio_duration_seconds > 0
+                    else None
+                ),
                 "avg_wer": mean_or_none(wer_values),
                 "avg_cer": mean_or_none(cer_values),
                 "last_detected_language": ok_runs[-1].detected_language
@@ -858,6 +889,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
         "median_total_s",
         "avg_load_s",
         "avg_transcribe_s",
+        "avg_rtf",
         "avg_wer",
         "avg_cer",
     ]
@@ -872,6 +904,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
                 format_float(row["median_total_seconds"]),
                 format_float(row["avg_load_seconds"]),
                 format_float(row["avg_transcribe_seconds"]),
+                format_float(row["avg_rtf"]),
                 format_float(row["avg_wer"]),
                 format_float(row["avg_cer"]),
             ]
@@ -895,6 +928,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
     print("median_total_s: median end-to-end runtime in seconds")
     print("avg_load_s: average model load time in seconds when measurable")
     print("avg_transcribe_s: average transcription time in seconds")
+    print("avg_rtf: average real-time factor (transcribe_s / audio_duration_s)")
     print("avg_wer: average word error rate against the reference transcript")
     print("avg_cer: average character error rate against the reference transcript")
 
@@ -920,9 +954,12 @@ def write_csv(output_path: Path, results: list[RunResult]) -> None:
             writer.writerow(asdict(result))
 
 
-def build_metadata(args: argparse.Namespace, audio_path: Path) -> dict[str, Any]:
+def build_metadata(
+    args: argparse.Namespace, audio_path: Path, audio_duration_seconds: float
+) -> dict[str, Any]:
     return {
         "audio": str(audio_path),
+        "audio_duration_seconds": audio_duration_seconds,
         "models": args.models,
         "backends": args.backends,
         "runs": args.runs,
@@ -954,6 +991,7 @@ def build_metadata(args: argparse.Namespace, audio_path: Path) -> dict[str, Any]
 def main() -> int:
     args = parse_args()
     audio_path = ensure_audio_file(args.audio)
+    audio_duration_seconds = get_audio_duration_seconds(audio_path)
     args.reference_transcript_text = load_reference_transcript(
         args.reference_transcript
     )
@@ -1012,9 +1050,9 @@ def main() -> int:
                         file=sys.stderr,
                     )
 
-    aggregated = aggregate_results(results)
+    aggregated = aggregate_results(results, audio_duration_seconds)
     payload = {
-        "metadata": build_metadata(args, audio_path),
+        "metadata": build_metadata(args, audio_path, audio_duration_seconds),
         "summary": aggregated,
         "runs": [asdict(result) for result in results],
     }
