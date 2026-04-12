@@ -219,7 +219,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--insanely-fast-whisper-device-id",
         default="mps",
-        help='Device id passed to insanely-fast-whisper. Use "mps" on Apple Silicon.',
+        help='Device id passed to insanely-fast-whisper. Defaults to "mps" with CPU fallback when MPS is unavailable.',
     )
     parser.add_argument(
         "--insanely-fast-whisper-batch-size",
@@ -298,6 +298,22 @@ def get_audio_duration_seconds(audio_path: Path) -> float:
         raise RuntimeError(
             "soundfile is required to compute audio duration for non-WAV files"
         ) from exc
+
+
+def resolve_insanely_fast_whisper_device(
+    requested_device_id: str,
+) -> tuple[str, bool, str]:
+    if requested_device_id == "mps":
+        try:
+            import torch
+
+            if torch.backends.mps.is_available():
+                return "mps", True, requested_device_id
+        except ImportError:
+            pass
+        return "cpu", False, "cpu"
+
+    return f"cuda:{requested_device_id}", False, requested_device_id
 
 
 def compute_word_error_rate(reference: str, hypothesis: str) -> float:
@@ -681,10 +697,8 @@ def load_backend_session(
         model_repo = INSANELY_FAST_WHISPER_REPOS.get(model_name)
         if model_repo is None:
             raise ValueError(f"Unsupported insanely-fast-whisper model: {model_name}")
-        device = (
-            "mps"
-            if args.insanely_fast_whisper_device_id == "mps"
-            else f"cuda:{args.insanely_fast_whisper_device_id}"
+        device, should_clear_mps_cache, resolved_device_id = (
+            resolve_insanely_fast_whisper_device(args.insanely_fast_whisper_device_id)
         )
         attn = "flash_attention_2" if args.insanely_fast_whisper_flash else "sdpa"
         generate_kwargs = {"task": args.task, "language": args.language or None}
@@ -699,12 +713,16 @@ def load_backend_session(
             device=device,
             model_kwargs={"attn_implementation": attn},
         )
-        if args.insanely_fast_whisper_device_id == "mps":
+        if should_clear_mps_cache:
             torch.mps.empty_cache()
         return BackendSession(
             backend,
             model_name,
-            {"pipe": pipe, "generate_kwargs": generate_kwargs},
+            {
+                "pipe": pipe,
+                "generate_kwargs": generate_kwargs,
+                "resolved_device_id": resolved_device_id,
+            },
             time.perf_counter() - load_started,
         )
 
@@ -998,7 +1016,6 @@ def build_metadata(
         "mlx_suffix": args.mlx_suffix,
         "lightning_whisper_mlx_batch_size": args.lightning_whisper_mlx_batch_size,
         "lightning_whisper_mlx_quant": args.lightning_whisper_mlx_quant,
-        "insanely_fast_whisper_binary": args.insanely_fast_whisper_binary,
         "insanely_fast_whisper_device_id": args.insanely_fast_whisper_device_id,
         "insanely_fast_whisper_batch_size": args.insanely_fast_whisper_batch_size,
         "insanely_fast_whisper_flash": args.insanely_fast_whisper_flash,

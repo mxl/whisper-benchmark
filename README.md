@@ -30,7 +30,7 @@ brew install ffmpeg
 
 `mlx-audio` currently requires Python `3.10+`, so it may need a newer virtualenv than the rest of this repo if your local environment is older.
 
-`insanely-fast-whisper` is benchmarked in-process through `transformers.pipeline(...)`. On macOS it will usually be run with `mps`, and the benchmark currently defaults to `--insanely-fast-whisper-device-id mps`.
+`insanely-fast-whisper` is benchmarked in-process through `transformers.pipeline(...)`. On macOS it will usually run with `mps`; if MPS is unavailable, the benchmark falls back to CPU when `--insanely-fast-whisper-device-id mps` is used.
 
 By default, MLX model repos are resolved as `mlx-community/whisper-<model>-mlx`, except `large-v3-turbo`, which resolves to `mlx-community/whisper-large-v3-turbo`.
 
