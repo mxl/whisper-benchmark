@@ -630,6 +630,9 @@ def load_backend_session(
         )
 
     if backend == "lightning-whisper-mlx":
+        import mlx.core as mx
+        from lightning_whisper_mlx.transcribe import ModelHolder
+
         lightning_model_name = LIGHTNING_WHISPER_MLX_MODELS.get(model_name)
         if lightning_model_name is None:
             raise ValueError(f"Unsupported lightning-whisper-mlx model: {model_name}")
@@ -643,6 +646,7 @@ def load_backend_session(
             repo_id=lightning_model_repo(lightning_model_name, quant),
             allow_patterns=["config.json", "weights.npz"],
         )
+        ModelHolder.get_model(model_path, dtype=mx.float16)
         return BackendSession(
             backend,
             model_name,
