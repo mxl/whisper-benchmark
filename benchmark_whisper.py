@@ -451,6 +451,7 @@ def run_insanely_fast_whisper(
     outputs = session["pipe"](
         str(audio_path),
         chunk_length_s=30,
+        ignore_warning=True,
         batch_size=args.insanely_fast_whisper_batch_size,
         generate_kwargs=session["generate_kwargs"],
         return_timestamps=True,
