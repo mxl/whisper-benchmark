@@ -73,6 +73,14 @@ class RunResult:
     error: str | None
 
 
+@dataclass
+class BackendSession:
+    backend: str
+    model: str
+    session: Any
+    load_seconds: float | None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Benchmark faster-whisper vs mlx-whisper across multiple Whisper model sizes."
@@ -292,24 +300,49 @@ def score_transcript(
     )
 
 
+def build_run_result(
+    *,
+    backend: str,
+    model_name: str,
+    run_index: int,
+    load_seconds: float | None,
+    transcribe_seconds: float,
+    transcript: str,
+    detected_language: str | None,
+    detected_language_probability: float | None,
+    reference_transcript: str | None,
+) -> RunResult:
+    chars, words = summarize_text(transcript)
+    wer, cer = score_transcript(transcript, reference_transcript)
+    return RunResult(
+        backend=backend,
+        model=model_name,
+        run_index=run_index,
+        load_seconds=load_seconds,
+        transcribe_seconds=transcribe_seconds,
+        total_seconds=(load_seconds or 0.0) + transcribe_seconds,
+        transcript=transcript,
+        transcript_chars=chars,
+        transcript_words=words,
+        wer=wer,
+        cer=cer,
+        detected_language=detected_language,
+        detected_language_probability=detected_language_probability,
+        status="ok",
+        error=None,
+    )
+
+
 def run_faster_whisper(
     audio_path: Path,
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
+    session: Any,
+    load_seconds: float | None,
 ) -> RunResult:
-    from faster_whisper import WhisperModel
-
-    load_started = time.perf_counter()
-    model = WhisperModel(
-        model_name,
-        device=args.device,
-        compute_type=args.compute_type,
-    )
-    load_seconds = time.perf_counter() - load_started
-
     transcribe_started = time.perf_counter()
-    segments, info = model.transcribe(
+    segments, info = session.transcribe(
         str(audio_path),
         beam_size=args.beam_size,
         language=args.language,
@@ -320,28 +353,16 @@ def run_faster_whisper(
     # faster-whisper yields segments lazily, so timing must include iteration.
     transcript = "".join(segment.text for segment in segments).strip()
     transcribe_seconds = time.perf_counter() - transcribe_started
-    chars, words = summarize_text(transcript)
-    wer, cer = score_transcript(
-        transcript,
-        args.reference_transcript_text,
-    )
-
-    return RunResult(
+    return build_run_result(
         backend="faster-whisper",
-        model=model_name,
+        model_name=model_name,
         run_index=run_index,
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
-        total_seconds=load_seconds + transcribe_seconds,
         transcript=transcript,
-        transcript_chars=chars,
-        transcript_words=words,
-        wer=wer,
-        cer=cer,
         detected_language=getattr(info, "language", None),
         detected_language_probability=getattr(info, "language_probability", None),
-        status="ok",
-        error=None,
+        reference_transcript=args.reference_transcript_text,
     )
 
 
@@ -350,25 +371,15 @@ def run_mlx_whisper(
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
+    session: Any,
+    load_seconds: float | None,
 ) -> RunResult:
-    import mlx.core as mx
     import mlx_whisper
-    from mlx_whisper.load_models import load_model as mlx_whisper_load_model
-    from mlx_whisper.transcribe import ModelHolder
-
-    mlx_suffix = "" if model_name == "large-v3-turbo" else args.mlx_suffix
-    model_repo = f"{args.mlx_prefix}{model_name}{mlx_suffix}"
-    dtype = mx.float16
-
-    load_started = time.perf_counter()
-    ModelHolder.model = mlx_whisper_load_model(model_repo, dtype=dtype)
-    ModelHolder.model_path = model_repo
-    load_seconds = time.perf_counter() - load_started
 
     transcribe_started = time.perf_counter()
     result = mlx_whisper.transcribe(
         str(audio_path),
-        path_or_hf_repo=model_repo,
+        path_or_hf_repo=session["model_repo"],
         language=args.language,
         task=args.task,
         condition_on_previous_text=args.condition_on_previous_text,
@@ -377,28 +388,16 @@ def run_mlx_whisper(
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
     transcript = (result.get("text") or "").strip()
-    chars, words = summarize_text(transcript)
-    wer, cer = score_transcript(
-        transcript,
-        args.reference_transcript_text,
-    )
-
-    return RunResult(
+    return build_run_result(
         backend="mlx-whisper",
-        model=model_name,
+        model_name=model_name,
         run_index=run_index,
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
-        total_seconds=load_seconds + transcribe_seconds,
         transcript=transcript,
-        transcript_chars=chars,
-        transcript_words=words,
-        wer=wer,
-        cer=cer,
         detected_language=result.get("language"),
         detected_language_probability=result.get("language_probability"),
-        status="ok",
-        error=None,
+        reference_transcript=args.reference_transcript_text,
     )
 
 
@@ -407,72 +406,33 @@ def run_insanely_fast_whisper(
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
+    session: Any,
+    load_seconds: float | None,
 ) -> RunResult:
-    import torch
-    from transformers import pipeline
     from insanely_fast_whisper.utils.result import build_result
 
-    model_repo = INSANELY_FAST_WHISPER_REPOS.get(model_name)
-    if model_repo is None:
-        raise ValueError(f"Unsupported insanely-fast-whisper model: {model_name}")
-
-    device = (
-        "mps"
-        if args.insanely_fast_whisper_device_id == "mps"
-        else f"cuda:{args.insanely_fast_whisper_device_id}"
-    )
-    attn = "flash_attention_2" if args.insanely_fast_whisper_flash else "sdpa"
-
-    load_started = time.perf_counter()
-    pipe = pipeline(
-        "automatic-speech-recognition",
-        model=model_repo,
-        torch_dtype=torch.float16,
-        device=device,
-        model_kwargs={"attn_implementation": attn},
-    )
-    if args.insanely_fast_whisper_device_id == "mps":
-        torch.mps.empty_cache()
-    load_seconds = time.perf_counter() - load_started
-
-    generate_kwargs = {"task": args.task, "language": args.language or None}
-    if model_repo.endswith(".en"):
-        generate_kwargs.pop("task")
-
     transcribe_started = time.perf_counter()
-    outputs = pipe(
+    outputs = session["pipe"](
         str(audio_path),
         chunk_length_s=30,
         batch_size=args.insanely_fast_whisper_batch_size,
-        generate_kwargs=generate_kwargs,
+        generate_kwargs=session["generate_kwargs"],
         return_timestamps=True,
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
 
     result = build_result([], outputs)
     transcript = (result.get("text") or "").strip()
-    chars, words = summarize_text(transcript)
-    wer, cer = score_transcript(
-        transcript,
-        args.reference_transcript_text,
-    )
-
-    return RunResult(
+    return build_run_result(
         backend="insanely-fast-whisper",
-        model=model_name,
+        model_name=model_name,
         run_index=run_index,
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
-        total_seconds=load_seconds + transcribe_seconds,
         transcript=transcript,
-        transcript_chars=chars,
-        transcript_words=words,
-        wer=wer,
-        cer=cer,
         detected_language=result.get("language"),
         detected_language_probability=None,
-        status="ok",
-        error=None,
+        reference_transcript=args.reference_transcript_text,
     )
 
 
@@ -481,21 +441,14 @@ def run_mlx_audio(
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
+    session: Any,
+    load_seconds: float | None,
 ) -> RunResult:
     from mlx_audio.stt.generate import generate_transcription
-    from mlx_audio.stt.utils import load_model
-
-    model_repo = MLX_AUDIO_WHISPER_REPOS.get(model_name)
-    if model_repo is None:
-        raise ValueError(f"Unsupported mlx-audio model: {model_name}")
-
-    load_started = time.perf_counter()
-    model = load_model(model_repo)
-    load_seconds = time.perf_counter() - load_started
 
     transcribe_started = time.perf_counter()
     result = generate_transcription(
-        model=model,
+        model=session,
         audio=str(audio_path),
         language=args.language,
         task=args.task,
@@ -504,31 +457,20 @@ def run_mlx_audio(
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
     transcript = (getattr(result, "text", None) or result.get("text") or "").strip()
-    chars, words = summarize_text(transcript)
-    wer, cer = score_transcript(
-        transcript,
-        args.reference_transcript_text,
-    )
     detected_language = getattr(result, "language", None)
     if detected_language is None and isinstance(result, dict):
         detected_language = result.get("language")
 
-    return RunResult(
+    return build_run_result(
         backend="mlx-audio",
-        model=model_name,
+        model_name=model_name,
         run_index=run_index,
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
-        total_seconds=load_seconds + transcribe_seconds,
         transcript=transcript,
-        transcript_chars=chars,
-        transcript_words=words,
-        wer=wer,
-        cer=cer,
         detected_language=detected_language,
         detected_language_probability=None,
-        status="ok",
-        error=None,
+        reference_transcript=args.reference_transcript_text,
     )
 
 
@@ -537,29 +479,15 @@ def run_lightning_whisper_mlx(
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
+    session: Any,
+    load_seconds: float | None,
 ) -> RunResult:
     from lightning_whisper_mlx.transcribe import transcribe_audio
-
-    lightning_model_name = LIGHTNING_WHISPER_MLX_MODELS.get(model_name)
-    if lightning_model_name is None:
-        raise ValueError(f"Unsupported lightning-whisper-mlx model: {model_name}")
-
-    quant = (
-        None
-        if args.lightning_whisper_mlx_quant == "none"
-        else args.lightning_whisper_mlx_quant
-    )
-    load_started = time.perf_counter()
-    model_path = snapshot_download(
-        repo_id=lightning_model_repo(lightning_model_name, quant),
-        allow_patterns=["config.json", "weights.npz"],
-    )
-    load_seconds = time.perf_counter() - load_started
 
     transcribe_started = time.perf_counter()
     result = transcribe_audio(
         str(audio_path),
-        path_or_hf_repo=model_path,
+        path_or_hf_repo=session["model_path"],
         language=args.language,
         task=args.task,
         condition_on_previous_text=args.condition_on_previous_text,
@@ -569,28 +497,16 @@ def run_lightning_whisper_mlx(
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
     transcript = (result.get("text") or "").strip()
-    chars, words = summarize_text(transcript)
-    wer, cer = score_transcript(
-        transcript,
-        args.reference_transcript_text,
-    )
-
-    return RunResult(
+    return build_run_result(
         backend="lightning-whisper-mlx",
-        model=model_name,
+        model_name=model_name,
         run_index=run_index,
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
-        total_seconds=load_seconds + transcribe_seconds,
         transcript=transcript,
-        transcript_chars=chars,
-        transcript_words=words,
-        wer=wer,
-        cer=cer,
         detected_language=result.get("language"),
         detected_language_probability=None,
-        status="ok",
-        error=None,
+        reference_transcript=args.reference_transcript_text,
     )
 
 
@@ -634,25 +550,16 @@ def run_openai_whisper(
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
+    session: Any,
+    load_seconds: float | None,
 ) -> RunResult:
-    import whisper
-
-    whisper_model_name = OPENAI_WHISPER_REPOS.get(model_name)
-    if whisper_model_name is None:
-        raise ValueError(f"Unsupported openai-whisper model: {model_name}")
-
-    device = args.device if args.device != "auto" else None
-    load_started = time.perf_counter()
-    model = whisper.load_model(whisper_model_name, device=device)
-    load_seconds = time.perf_counter() - load_started
-
     temperature = (
         (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
         if args.openai_whisper_temperature_fallback
         else 0
     )
     transcribe_started = time.perf_counter()
-    result = model.transcribe(
+    result = session.transcribe(
         str(audio_path),
         language=args.language,
         task=args.task,
@@ -664,29 +571,132 @@ def run_openai_whisper(
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
     transcript = (result.get("text") or "").strip()
-    chars, words = summarize_text(transcript)
-    wer, cer = score_transcript(
-        transcript,
-        args.reference_transcript_text,
-    )
-
-    return RunResult(
+    return build_run_result(
         backend="openai-whisper",
-        model=model_name,
+        model_name=model_name,
         run_index=run_index,
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
-        total_seconds=load_seconds + transcribe_seconds,
         transcript=transcript,
-        transcript_chars=chars,
-        transcript_words=words,
-        wer=wer,
-        cer=cer,
         detected_language=result.get("language"),
         detected_language_probability=None,
-        status="ok",
-        error=None,
+        reference_transcript=args.reference_transcript_text,
     )
+
+
+def load_backend_session(
+    backend: str, model_name: str, args: argparse.Namespace
+) -> BackendSession:
+    if backend == "faster-whisper":
+        from faster_whisper import WhisperModel
+
+        load_started = time.perf_counter()
+        session = WhisperModel(
+            model_name,
+            device=args.device,
+            compute_type=args.compute_type,
+        )
+        return BackendSession(
+            backend, model_name, session, time.perf_counter() - load_started
+        )
+
+    if backend == "mlx-whisper":
+        import mlx.core as mx
+        from mlx_whisper.load_models import load_model as mlx_whisper_load_model
+        from mlx_whisper.transcribe import ModelHolder
+
+        mlx_suffix = "" if model_name == "large-v3-turbo" else args.mlx_suffix
+        model_repo = f"{args.mlx_prefix}{model_name}{mlx_suffix}"
+        load_started = time.perf_counter()
+        ModelHolder.model = mlx_whisper_load_model(model_repo, dtype=mx.float16)
+        ModelHolder.model_path = model_repo
+        return BackendSession(
+            backend,
+            model_name,
+            {"model_repo": model_repo},
+            time.perf_counter() - load_started,
+        )
+
+    if backend == "mlx-audio":
+        from mlx_audio.stt.utils import load_model
+
+        model_repo = MLX_AUDIO_WHISPER_REPOS.get(model_name)
+        if model_repo is None:
+            raise ValueError(f"Unsupported mlx-audio model: {model_name}")
+        load_started = time.perf_counter()
+        session = load_model(model_repo)
+        return BackendSession(
+            backend, model_name, session, time.perf_counter() - load_started
+        )
+
+    if backend == "lightning-whisper-mlx":
+        lightning_model_name = LIGHTNING_WHISPER_MLX_MODELS.get(model_name)
+        if lightning_model_name is None:
+            raise ValueError(f"Unsupported lightning-whisper-mlx model: {model_name}")
+        quant = (
+            None
+            if args.lightning_whisper_mlx_quant == "none"
+            else args.lightning_whisper_mlx_quant
+        )
+        load_started = time.perf_counter()
+        model_path = snapshot_download(
+            repo_id=lightning_model_repo(lightning_model_name, quant),
+            allow_patterns=["config.json", "weights.npz"],
+        )
+        return BackendSession(
+            backend,
+            model_name,
+            {"model_path": model_path},
+            time.perf_counter() - load_started,
+        )
+
+    if backend == "insanely-fast-whisper":
+        import torch
+        from transformers import pipeline
+
+        model_repo = INSANELY_FAST_WHISPER_REPOS.get(model_name)
+        if model_repo is None:
+            raise ValueError(f"Unsupported insanely-fast-whisper model: {model_name}")
+        device = (
+            "mps"
+            if args.insanely_fast_whisper_device_id == "mps"
+            else f"cuda:{args.insanely_fast_whisper_device_id}"
+        )
+        attn = "flash_attention_2" if args.insanely_fast_whisper_flash else "sdpa"
+        generate_kwargs = {"task": args.task, "language": args.language or None}
+        if model_repo.endswith(".en"):
+            generate_kwargs.pop("task")
+        load_started = time.perf_counter()
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model_repo,
+            torch_dtype=torch.float16,
+            device=device,
+            model_kwargs={"attn_implementation": attn},
+        )
+        if args.insanely_fast_whisper_device_id == "mps":
+            torch.mps.empty_cache()
+        return BackendSession(
+            backend,
+            model_name,
+            {"pipe": pipe, "generate_kwargs": generate_kwargs},
+            time.perf_counter() - load_started,
+        )
+
+    if backend == "openai-whisper":
+        import whisper
+
+        whisper_model_name = OPENAI_WHISPER_REPOS.get(model_name)
+        if whisper_model_name is None:
+            raise ValueError(f"Unsupported openai-whisper model: {model_name}")
+        device = args.device if args.device != "auto" else None
+        load_started = time.perf_counter()
+        session = whisper.load_model(whisper_model_name, device=device)
+        return BackendSession(
+            backend, model_name, session, time.perf_counter() - load_started
+        )
+
+    raise ValueError(f"Unsupported backend: {backend}")
 
 
 def run_single_backend(
@@ -695,20 +705,34 @@ def run_single_backend(
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
+    session: Any,
+    load_seconds: float | None,
 ) -> RunResult:
     try:
         if backend == "faster-whisper":
-            return run_faster_whisper(audio_path, model_name, run_index, args)
+            return run_faster_whisper(
+                audio_path, model_name, run_index, args, session, load_seconds
+            )
         if backend == "mlx-whisper":
-            return run_mlx_whisper(audio_path, model_name, run_index, args)
+            return run_mlx_whisper(
+                audio_path, model_name, run_index, args, session, load_seconds
+            )
         if backend == "mlx-audio":
-            return run_mlx_audio(audio_path, model_name, run_index, args)
+            return run_mlx_audio(
+                audio_path, model_name, run_index, args, session, load_seconds
+            )
         if backend == "lightning-whisper-mlx":
-            return run_lightning_whisper_mlx(audio_path, model_name, run_index, args)
+            return run_lightning_whisper_mlx(
+                audio_path, model_name, run_index, args, session, load_seconds
+            )
         if backend == "insanely-fast-whisper":
-            return run_insanely_fast_whisper(audio_path, model_name, run_index, args)
+            return run_insanely_fast_whisper(
+                audio_path, model_name, run_index, args, session, load_seconds
+            )
         if backend == "openai-whisper":
-            return run_openai_whisper(audio_path, model_name, run_index, args)
+            return run_openai_whisper(
+                audio_path, model_name, run_index, args, session, load_seconds
+            )
         raise ValueError(f"Unsupported backend: {backend}")
     except (
         Exception
@@ -733,11 +757,17 @@ def run_single_backend(
 
 
 def maybe_warmup(
-    backend: str, audio_path: Path, model_name: str, args: argparse.Namespace
+    backend: str,
+    audio_path: Path,
+    model_name: str,
+    args: argparse.Namespace,
+    session: Any,
 ) -> None:
     if not args.warmup:
         return
-    warmup_result = run_single_backend(backend, audio_path, model_name, 0, args)
+    warmup_result = run_single_backend(
+        backend, audio_path, model_name, 0, args, session, None
+    )
     if warmup_result.status != "ok":
         print(
             f"warmup failed for {backend} {model_name}: {warmup_result.error}",
@@ -927,10 +957,43 @@ def main() -> int:
     for model_name in args.models:
         for backend in args.backends:
             print(f"Benchmarking {backend} on model {model_name}...", file=sys.stderr)
-            maybe_warmup(backend, audio_path, model_name, args)
+            try:
+                backend_session = load_backend_session(backend, model_name, args)
+            except Exception as exc:  # pragma: no cover - benchmark scripts should continue after failures.
+                error = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+                print(f"  load error: {error}", file=sys.stderr)
+                for run_index in range(1, args.runs + 1):
+                    results.append(
+                        RunResult(
+                            backend=backend,
+                            model=model_name,
+                            run_index=run_index,
+                            load_seconds=None,
+                            transcribe_seconds=None,
+                            total_seconds=None,
+                            transcript=None,
+                            transcript_chars=None,
+                            transcript_words=None,
+                            wer=None,
+                            cer=None,
+                            detected_language=None,
+                            detected_language_probability=None,
+                            status="error",
+                            error=error,
+                        )
+                    )
+                continue
+
+            maybe_warmup(backend, audio_path, model_name, args, backend_session.session)
             for run_index in range(1, args.runs + 1):
                 result = run_single_backend(
-                    backend, audio_path, model_name, run_index, args
+                    backend,
+                    audio_path,
+                    model_name,
+                    run_index,
+                    args,
+                    backend_session.session,
+                    backend_session.load_seconds if run_index == 1 else None,
                 )
                 results.append(result)
                 if result.status == "ok":
