@@ -59,6 +59,7 @@ INSANELY_FAST_WHISPER_REPOS = {
 class RunResult:
     backend: str
     model: str
+    backend_device: str | None
     run_index: int
     load_seconds: float | None
     transcribe_seconds: float | None
@@ -78,6 +79,7 @@ class RunResult:
 class BackendSession:
     backend: str
     model: str
+    device: str | None
     session: Any
     load_seconds: float | None
 
@@ -353,6 +355,7 @@ def build_run_result(
     return RunResult(
         backend=backend,
         model=model_name,
+        backend_device=None,
         run_index=run_index,
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
@@ -633,8 +636,15 @@ def load_backend_session(
             device=args.device,
             compute_type=args.compute_type,
         )
+        resolved_device = str(
+            getattr(getattr(session, "model", None), "device", args.device)
+        )
         return BackendSession(
-            backend, model_name, session, time.perf_counter() - load_started
+            backend,
+            model_name,
+            resolved_device,
+            session,
+            time.perf_counter() - load_started,
         )
 
     if backend == "mlx-whisper":
@@ -650,6 +660,7 @@ def load_backend_session(
         return BackendSession(
             backend,
             model_name,
+            "mlx",
             {"model_repo": model_repo},
             time.perf_counter() - load_started,
         )
@@ -663,7 +674,11 @@ def load_backend_session(
         load_started = time.perf_counter()
         session = load_model(model_repo)
         return BackendSession(
-            backend, model_name, session, time.perf_counter() - load_started
+            backend,
+            model_name,
+            "mlx",
+            session,
+            time.perf_counter() - load_started,
         )
 
     if backend == "lightning-whisper-mlx":
@@ -687,6 +702,7 @@ def load_backend_session(
         return BackendSession(
             backend,
             model_name,
+            "mlx",
             {"model_path": model_path},
             time.perf_counter() - load_started,
         )
@@ -719,6 +735,7 @@ def load_backend_session(
         return BackendSession(
             backend,
             model_name,
+            device,
             {
                 "pipe": pipe,
                 "generate_kwargs": generate_kwargs,
@@ -737,7 +754,11 @@ def load_backend_session(
         load_started = time.perf_counter()
         session = whisper.load_model(whisper_model_name, device=device)
         return BackendSession(
-            backend, model_name, session, time.perf_counter() - load_started
+            backend,
+            model_name,
+            str(getattr(session, "device", device or "cpu")),
+            session,
+            time.perf_counter() - load_started,
         )
 
     raise ValueError(f"Unsupported backend: {backend}")
@@ -749,41 +770,46 @@ def run_single_backend(
     model_name: str,
     run_index: int,
     args: argparse.Namespace,
-    session: Any,
+    backend_session: BackendSession,
     load_seconds: float | None,
 ) -> RunResult:
     try:
+        session = backend_session.session
         if backend == "faster-whisper":
-            return run_faster_whisper(
+            result = run_faster_whisper(
                 audio_path, model_name, run_index, args, session, load_seconds
             )
-        if backend == "mlx-whisper":
-            return run_mlx_whisper(
+        elif backend == "mlx-whisper":
+            result = run_mlx_whisper(
                 audio_path, model_name, run_index, args, session, load_seconds
             )
-        if backend == "mlx-audio":
-            return run_mlx_audio(
+        elif backend == "mlx-audio":
+            result = run_mlx_audio(
                 audio_path, model_name, run_index, args, session, load_seconds
             )
-        if backend == "lightning-whisper-mlx":
-            return run_lightning_whisper_mlx(
+        elif backend == "lightning-whisper-mlx":
+            result = run_lightning_whisper_mlx(
                 audio_path, model_name, run_index, args, session, load_seconds
             )
-        if backend == "insanely-fast-whisper":
-            return run_insanely_fast_whisper(
+        elif backend == "insanely-fast-whisper":
+            result = run_insanely_fast_whisper(
                 audio_path, model_name, run_index, args, session, load_seconds
             )
-        if backend == "openai-whisper":
-            return run_openai_whisper(
+        elif backend == "openai-whisper":
+            result = run_openai_whisper(
                 audio_path, model_name, run_index, args, session, load_seconds
             )
-        raise ValueError(f"Unsupported backend: {backend}")
+        else:
+            raise ValueError(f"Unsupported backend: {backend}")
+        result.backend_device = backend_session.device
+        return result
     except (
         Exception
     ) as exc:  # pragma: no cover - benchmark scripts should continue after failures.
         return RunResult(
             backend=backend,
             model=model_name,
+            backend_device=backend_session.device,
             run_index=run_index,
             load_seconds=None,
             transcribe_seconds=None,
@@ -805,12 +831,12 @@ def maybe_warmup(
     audio_path: Path,
     model_name: str,
     args: argparse.Namespace,
-    session: Any,
+    backend_session: BackendSession,
 ) -> None:
     if not args.warmup:
         return
     warmup_result = run_single_backend(
-        backend, audio_path, model_name, 0, args, session, None
+        backend, audio_path, model_name, 0, args, backend_session, None
     )
     if warmup_result.status != "ok":
         print(
@@ -851,6 +877,7 @@ def aggregate_results(
             {
                 "backend": backend,
                 "model": model,
+                "backend_device": ok_runs[-1].backend_device if ok_runs else None,
                 "runs": len(group),
                 "successful_runs": len(ok_runs),
                 "failed_runs": len(group) - len(ok_runs),
@@ -1049,6 +1076,7 @@ def main() -> int:
                         RunResult(
                             backend=backend,
                             model=model_name,
+                            backend_device=None,
                             run_index=run_index,
                             load_seconds=None,
                             transcribe_seconds=None,
@@ -1066,7 +1094,7 @@ def main() -> int:
                     )
                 continue
 
-            maybe_warmup(backend, audio_path, model_name, args, backend_session.session)
+            maybe_warmup(backend, audio_path, model_name, args, backend_session)
             for run_index in range(1, args.runs + 1):
                 result = run_single_backend(
                     backend,
@@ -1074,7 +1102,7 @@ def main() -> int:
                     model_name,
                     run_index,
                     args,
-                    backend_session.session,
+                    backend_session,
                     backend_session.load_seconds if run_index == 1 else None,
                 )
                 results.append(result)
