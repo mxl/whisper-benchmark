@@ -10,7 +10,9 @@ from huggingface_hub import snapshot_download
 from benchmark_whisper import (
     DEFAULT_MODELS,
     INSANELY_FAST_WHISPER_REPOS,
+    LIGHTNING_WHISPER_MLX_MODELS,
     MLX_AUDIO_WHISPER_REPOS,
+    lightning_model_repo,
 )
 
 
@@ -74,6 +76,11 @@ def parse_args() -> argparse.Namespace:
         help="Download openai-whisper model repos only.",
     )
     parser.add_argument(
+        "--lightning-whisper-mlx",
+        action="store_true",
+        help="Download lightning-whisper-mlx model repos only.",
+    )
+    parser.add_argument(
         "--insanely-fast-whisper",
         action="store_true",
         help="Download insanely-fast-whisper model repos only.",
@@ -113,6 +120,19 @@ def download_mlx_audio_whisper(model_name: str) -> None:
     print(f"\nFinished mlx-audio model: {repo_name}", flush=True)
 
 
+def download_lightning_whisper_mlx(model_name: str) -> None:
+    lightning_name = LIGHTNING_WHISPER_MLX_MODELS.get(model_name)
+    if lightning_name is None:
+        return
+    repo_id = lightning_model_repo(lightning_name, None)
+    print(f"Downloading lightning-whisper-mlx model: {repo_id}", flush=True)
+    snapshot_download(
+        repo_id=repo_id,
+        allow_patterns=["config.json", "weights.npz"],
+    )
+    print(f"\nFinished lightning-whisper-mlx model: {repo_id}", flush=True)
+
+
 def download_insanely_fast_whisper(model_name: str) -> None:
     repo_id = INSANELY_FAST_WHISPER_REPOS[model_name]
     print(f"Downloading insanely-fast-whisper model: {repo_id}", flush=True)
@@ -127,6 +147,7 @@ def resolve_engines(args: argparse.Namespace) -> set[str]:
             "faster-whisper",
             "mlx-whisper",
             "mlx-audio",
+            "lightning-whisper-mlx",
             "insanely-fast-whisper",
             "openai-whisper",
         }
@@ -138,6 +159,8 @@ def resolve_engines(args: argparse.Namespace) -> set[str]:
         engines.add("mlx-whisper")
     if args.mlx_audio:
         engines.add("mlx-audio")
+    if args.lightning_whisper_mlx:
+        engines.add("lightning-whisper-mlx")
     if args.insanely_fast_whisper:
         engines.add("insanely-fast-whisper")
     if not engines:
@@ -145,6 +168,7 @@ def resolve_engines(args: argparse.Namespace) -> set[str]:
             "faster-whisper",
             "mlx-whisper",
             "mlx-audio",
+            "lightning-whisper-mlx",
             "insanely-fast-whisper",
             "openai-whisper",
         }
@@ -180,6 +204,12 @@ def main() -> int:
                 download_mlx_audio_whisper(model_name)
             except Exception as exc:  # pragma: no cover - downloads should keep going.
                 failures.append((f"mlx-audio:{model_name}", str(exc)))
+
+        if "lightning-whisper-mlx" in engines:
+            try:
+                download_lightning_whisper_mlx(model_name)
+            except Exception as exc:  # pragma: no cover - downloads should keep going.
+                failures.append((f"lightning-whisper-mlx:{model_name}", str(exc)))
 
         if "insanely-fast-whisper" in engines:
             try:
