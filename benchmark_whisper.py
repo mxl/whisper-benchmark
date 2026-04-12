@@ -13,6 +13,7 @@ import time
 import traceback
 import unicodedata
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from huggingface_hub import snapshot_download
 import jiwer
 from pathlib import Path
@@ -195,8 +196,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path(DEFAULT_OUTPUT),
-        help="Path to write JSON results.",
+        default=None,
+        help="Path to write JSON results. Defaults to a timestamped filename.",
     )
     parser.add_argument(
         "--csv-output",
@@ -946,6 +947,7 @@ def format_float(value: float | None) -> str:
 
 
 def write_json(output_path: Path, payload: dict[str, Any]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
@@ -955,11 +957,26 @@ def write_csv(output_path: Path, results: list[RunResult]) -> None:
         if results
         else list(RunResult.__dataclass_fields__.keys())
     )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for result in results:
             writer.writerow(asdict(result))
+
+
+def resolve_output_paths(
+    output: Path | None, csv_output: Path | None
+) -> tuple[Path, Path | None]:
+    if output is not None:
+        return output, csv_output
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_output = Path("output") / f"benchmark_results_{timestamp}.json"
+    if csv_output is None:
+        return json_output, None
+
+    return json_output, csv_output
 
 
 def build_metadata(
@@ -998,6 +1015,7 @@ def build_metadata(
 
 def main() -> int:
     args = parse_args()
+    args.output, args.csv_output = resolve_output_paths(args.output, args.csv_output)
     audio_path = ensure_audio_file(args.audio)
     audio_duration_seconds = get_audio_duration_seconds(audio_path)
     args.reference_transcript_text = load_reference_transcript(
