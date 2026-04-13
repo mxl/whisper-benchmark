@@ -53,6 +53,12 @@ Run two repetitions and add warmup:
   --output results.json
 ```
 
+Print the full per-run table before the summary table:
+
+```bash
+.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --show-full-table
+```
+
 Only benchmark selected models:
 
 ```bash
@@ -153,6 +159,8 @@ mlx-whisper     mlx     tiny       3/3   0.987         0.981            0.123   
 
 When `--reference-transcript` is provided, the summary also includes `avg_wer` and `avg_cer`.
 WER and CER are computed with `jiwer` after a fixed multilingual-safe normalization step: Unicode NFKC normalization, lowercasing, punctuation removal, and whitespace collapsing.
+
+When `--show-full-table` is enabled, the script first prints one row per timed run and then prints the aggregated summary table.
 
 It also writes:
 

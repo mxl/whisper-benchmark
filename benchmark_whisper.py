@@ -244,6 +244,11 @@ def parse_args() -> argparse.Namespace:
         help="Run one untimed transcription warmup per backend/model before timed runs.",
     )
     parser.add_argument(
+        "--show-full-table",
+        action="store_true",
+        help="Print the full per-run results table before the aggregated summary.",
+    )
+    parser.add_argument(
         "--insanely-fast-whisper-device-id",
         default="mps",
         help='Device id passed to insanely-fast-whisper. Defaults to "mps" with CPU fallback when MPS is unavailable.',
@@ -1028,6 +1033,61 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
     print("avg_cer: average character error rate against the reference transcript")
 
 
+def print_runs_table(results: list[RunResult]) -> None:
+    headers = [
+        "backend",
+        "device",
+        "model",
+        "run",
+        "status",
+        "total_s",
+        "load_s",
+        "transcribe_s",
+        "rtf",
+        "wer",
+        "cer",
+        "error",
+    ]
+    rows = []
+    for result in results:
+        rtf = None
+        if result.total_seconds is not None and result.transcribe_seconds is not None:
+            rtf = (
+                result.transcribe_seconds / result.total_seconds
+                if result.total_seconds > 0
+                else None
+            )
+        rows.append(
+            [
+                result.backend,
+                result.backend_device or "-",
+                result.model,
+                str(result.run_index),
+                result.status,
+                format_float(result.total_seconds),
+                format_float(result.load_seconds),
+                format_float(result.transcribe_seconds),
+                format_float(rtf),
+                format_float(result.wer),
+                format_float(result.cer),
+                result.error or "-",
+            ]
+        )
+
+    widths = [len(header) for header in headers]
+    for row in rows:
+        for index, value in enumerate(row):
+            widths[index] = max(widths[index], len(value))
+
+    print("Runs:")
+    print(
+        "  ".join(header.ljust(widths[index]) for index, header in enumerate(headers))
+    )
+    for row in rows:
+        print("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
+    print()
+
+
 def print_skipped_summary(skipped: list[SkippedBenchmark]) -> None:
     if not skipped:
         return
@@ -1079,6 +1139,7 @@ def build_metadata(
         "insanely_fast_whisper_batch_size": args.insanely_fast_whisper_batch_size,
         "insanely_fast_whisper_flash": args.insanely_fast_whisper_flash,
         "warmup": args.warmup,
+        "show_full_table": args.show_full_table,
         "platform": platform.platform(),
         "python_version": sys.version,
     }
@@ -1160,6 +1221,8 @@ def main() -> int:
         "runs": [asdict(result) for result in results],
     }
     write_json(args.output, payload)
+    if args.show_full_table:
+        print_runs_table(results)
     print_summary(aggregated)
     print_skipped_summary(skipped)
     print(f"\nWrote JSON results to {args.output}")

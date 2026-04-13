@@ -103,6 +103,7 @@ class OutputHelperTests(unittest.TestCase):
             insanely_fast_whisper_batch_size=1,
             insanely_fast_whisper_flash=False,
             warmup=True,
+            show_full_table=False,
         )
 
         metadata = benchmark_whisper.build_metadata(
@@ -122,6 +123,7 @@ class OutputHelperTests(unittest.TestCase):
         self.assertEqual(metadata["condition_on_previous_text"], False)
         self.assertEqual(metadata["hallucination_silence_threshold"], 2.0)
         self.assertEqual(metadata["warmup"], True)
+        self.assertEqual(metadata["show_full_table"], False)
         self.assertNotIn("mlx_prefix", metadata)
         self.assertNotIn("mlx_suffix", metadata)
         self.assertIn("platform", metadata)
@@ -179,6 +181,38 @@ class OutputHelperTests(unittest.TestCase):
         self.assertIn("device", output)
         self.assertIn("mlx", output)
 
+    def test_print_runs_table_includes_per_run_details(self) -> None:
+        results = [
+            benchmark_whisper.RunResult(
+                backend="mlx-whisper",
+                model="tiny",
+                backend_device="mlx",
+                run_index=1,
+                load_seconds=1.25,
+                transcribe_seconds=2.5,
+                total_seconds=3.75,
+                transcript="hello world",
+                transcript_chars=11,
+                transcript_words=2,
+                wer=None,
+                cer=None,
+                detected_language="en",
+                detected_language_probability=None,
+                status="ok",
+                error=None,
+            )
+        ]
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            benchmark_whisper.print_runs_table(results)
+
+        output = stdout.getvalue()
+        self.assertIn("Runs:", output)
+        self.assertIn("mlx-whisper", output)
+        self.assertIn("mlx", output)
+        self.assertIn("ok", output)
+
     def test_write_json_writes_pretty_json_with_trailing_newline(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "result.json"
@@ -209,6 +243,18 @@ class BenchmarkCliTests(unittest.TestCase):
         self.assertFalse(args.condition_on_previous_text)
         self.assertFalse(args.openai_whisper_temperature_fallback)
 
+    def test_show_full_table_flag_parses(self) -> None:
+        with mock.patch(
+            "sys.argv",
+            [
+                "benchmark_whisper.py",
+                "audio.mp3",
+                "--show-full-table",
+            ],
+        ):
+            args = benchmark_whisper.parse_args()
+        self.assertTrue(args.show_full_table)
+
     def test_main_skips_unsupported_backend_model_combo(self) -> None:
         output_path = Path("/tmp/test-output.json")
         written_payload: dict[str, object] = {}
@@ -233,6 +279,7 @@ class BenchmarkCliTests(unittest.TestCase):
             insanely_fast_whisper_batch_size=1,
             insanely_fast_whisper_flash=False,
             lightning_whisper_mlx_batch_size=12,
+            show_full_table=False,
         )
 
         stderr = io.StringIO()
@@ -299,6 +346,94 @@ class BenchmarkCliTests(unittest.TestCase):
             "lightning-whisper-mlx large-v3-turbo: not supported",
             stdout.getvalue(),
         )
+
+    def test_main_prints_runs_table_before_summary_when_enabled(self) -> None:
+        output_path = Path("/tmp/test-output.json")
+        fake_args = argparse.Namespace(
+            audio=Path("audio.mp3"),
+            models=["tiny"],
+            backends=["mlx-whisper"],
+            runs=1,
+            language="en",
+            task="transcribe",
+            beam_size=5,
+            compute_type="default",
+            faster_whisper_vad_filter=True,
+            condition_on_previous_text=True,
+            openai_whisper_temperature_fallback=True,
+            hallucination_silence_threshold=2.0,
+            device="auto",
+            output=output_path,
+            reference_transcript=None,
+            warmup=False,
+            insanely_fast_whisper_device_id="mps",
+            insanely_fast_whisper_batch_size=1,
+            insanely_fast_whisper_flash=False,
+            lightning_whisper_mlx_batch_size=12,
+            show_full_table=True,
+        )
+
+        fake_result = benchmark_whisper.RunResult(
+            backend="mlx-whisper",
+            model="tiny",
+            backend_device="mlx",
+            run_index=1,
+            load_seconds=1.25,
+            transcribe_seconds=2.5,
+            total_seconds=3.75,
+            transcript="hello world",
+            transcript_chars=11,
+            transcript_words=2,
+            wer=None,
+            cer=None,
+            detected_language="en",
+            detected_language_probability=None,
+            status="ok",
+            error=None,
+        )
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(benchmark_whisper, "parse_args", return_value=fake_args),
+            mock.patch.object(
+                benchmark_whisper,
+                "resolve_output_paths",
+                return_value=output_path,
+            ),
+            mock.patch.object(
+                benchmark_whisper, "ensure_audio_file", return_value=Path("audio.mp3")
+            ),
+            mock.patch.object(
+                benchmark_whisper, "get_audio_duration_seconds", return_value=10.0
+            ),
+            mock.patch.object(
+                benchmark_whisper, "load_reference_transcript", return_value=None
+            ),
+            mock.patch.object(
+                benchmark_whisper,
+                "load_backend_session",
+                return_value=benchmark_whisper.BackendSession(
+                    backend="mlx-whisper",
+                    model="tiny",
+                    device="mlx",
+                    session=object(),
+                    load_seconds=1.25,
+                ),
+            ),
+            mock.patch.object(benchmark_whisper, "maybe_warmup"),
+            mock.patch.object(
+                benchmark_whisper, "run_single_backend", return_value=fake_result
+            ),
+            mock.patch.object(benchmark_whisper, "write_json"),
+            contextlib.redirect_stdout(stdout),
+        ):
+            exit_code = benchmark_whisper.main()
+
+        self.assertEqual(exit_code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Runs:", output)
+        self.assertIn("\nColumns:\n", output)
+        self.assertLess(output.index("Runs:"), output.index("\nColumns:\n"))
 
 
 class BackendInvocationTests(unittest.TestCase):
