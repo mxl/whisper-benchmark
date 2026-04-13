@@ -63,6 +63,72 @@ class BackendCapabilitiesTests(unittest.TestCase):
         )
 
 
+class OutputHelperTests(unittest.TestCase):
+    def test_resolve_output_paths_uses_explicit_paths_when_provided(self) -> None:
+        json_path = Path("custom/results.json")
+        csv_path = Path("custom/results.csv")
+        self.assertEqual(
+            benchmark_whisper.resolve_output_paths(json_path, csv_path),
+            (json_path, csv_path),
+        )
+
+    def test_resolve_output_paths_generates_timestamped_default_json_path(self) -> None:
+        fake_now = mock.Mock()
+        fake_now.strftime.return_value = "20260413_120000"
+        with mock.patch.object(benchmark_whisper, "datetime") as mock_datetime:
+            mock_datetime.now.return_value = fake_now
+            json_path, csv_path = benchmark_whisper.resolve_output_paths(None, None)
+        self.assertEqual(
+            json_path,
+            Path("output") / "benchmark_results_20260413_120000.json",
+        )
+        self.assertIsNone(csv_path)
+
+    def test_build_metadata_includes_current_benchmark_options(self) -> None:
+        args = argparse.Namespace(
+            models=["tiny", "large-v3"],
+            backends=["mlx-whisper", "openai-whisper"],
+            runs=2,
+            language="en",
+            task="transcribe",
+            reference_transcript=Path("reference.txt"),
+            beam_size=5,
+            compute_type="default",
+            device="auto",
+            faster_whisper_vad_filter=True,
+            condition_on_previous_text=False,
+            hallucination_silence_threshold=2.0,
+            openai_whisper_temperature_fallback=True,
+            mlx_prefix="mlx-community/whisper-",
+            mlx_suffix="-mlx",
+            lightning_whisper_mlx_batch_size=12,
+            insanely_fast_whisper_device_id="mps",
+            insanely_fast_whisper_batch_size=1,
+            insanely_fast_whisper_flash=False,
+            warmup=True,
+        )
+
+        metadata = benchmark_whisper.build_metadata(
+            args=args,
+            audio_path=Path("audio.mp3"),
+            audio_duration_seconds=12.5,
+        )
+
+        self.assertEqual(metadata["audio"], "audio.mp3")
+        self.assertEqual(metadata["audio_duration_seconds"], 12.5)
+        self.assertEqual(metadata["models"], ["tiny", "large-v3"])
+        self.assertEqual(metadata["backends"], ["mlx-whisper", "openai-whisper"])
+        self.assertEqual(metadata["runs"], 2)
+        self.assertEqual(metadata["language"], "en")
+        self.assertEqual(metadata["task"], "transcribe")
+        self.assertEqual(metadata["reference_transcript"], "reference.txt")
+        self.assertEqual(metadata["condition_on_previous_text"], False)
+        self.assertEqual(metadata["hallucination_silence_threshold"], 2.0)
+        self.assertEqual(metadata["warmup"], True)
+        self.assertIn("platform", metadata)
+        self.assertIn("python_version", metadata)
+
+
 class BenchmarkCliTests(unittest.TestCase):
     def test_boolean_optional_flags_parse(self) -> None:
         with mock.patch(
