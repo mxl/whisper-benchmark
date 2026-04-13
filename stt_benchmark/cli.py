@@ -1,7 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 from typing import Callable
+
+
+WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+
+
+def ensure_workspace_root_first() -> None:
+    root = str(WORKSPACE_ROOT)
+    sys.path[:] = [root, *[entry for entry in sys.path if entry != root]]
+
+
+ensure_workspace_root_first()
 
 import benchmark_whisper
 import download_models

@@ -753,6 +753,23 @@ class UnifiedCliTests(unittest.TestCase):
     def test_resolve_command_main_returns_current_callable(self) -> None:
         self.assertIs(stt_cli.resolve_command_main("benchmark"), benchmark_whisper.main)
 
+    def test_ensure_workspace_root_first_moves_workspace_ahead_of_site_packages(
+        self,
+    ) -> None:
+        workspace_root = str(stt_cli.WORKSPACE_ROOT)
+        fake_sys_path = [
+            "/tmp/venv/bin",
+            "/tmp/venv/lib/python3.11/site-packages",
+            workspace_root,
+            "/tmp/other",
+        ]
+
+        with mock.patch.object(stt_cli.sys, "path", fake_sys_path):
+            stt_cli.ensure_workspace_root_first()
+
+        self.assertEqual(stt_cli.sys.path[0], workspace_root)
+        self.assertEqual(stt_cli.sys.path.count(workspace_root), 1)
+
     def test_cli_dispatches_benchmark_subcommand(self) -> None:
         with mock.patch.object(
             benchmark_whisper, "main", return_value=0
