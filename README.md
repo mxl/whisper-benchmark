@@ -132,6 +132,14 @@ Download only selected model weights:
 .venv/bin/python download_models.py --mlx-whisper --models tiny large-v3
 ```
 
+## Run Tests
+
+Run the unit test suite with:
+
+```bash
+.venv/bin/python3 -m unittest test_benchmark.py
+```
+
 ## Output
 
 The script prints a summary table like:
