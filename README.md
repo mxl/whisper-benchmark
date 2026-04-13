@@ -34,6 +34,8 @@ brew install ffmpeg
 
 By default, MLX model repos are resolved as `mlx-community/whisper-<model>-mlx`, except `large-v3-turbo`, which resolves to `mlx-community/whisper-large-v3-turbo`.
 
+`lightning-whisper-mlx` uses direct model-to-repo mappings in this benchmark, including `large-v3-turbo`, which resolves to `mlx-community/whisper-turbo`.
+
 ## Run the benchmark
 
 Basic run across `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`:
@@ -101,6 +103,15 @@ Score against a ground-truth transcript:
   --reference-transcript /path/to/reference.txt
 ```
 
+Reduce end-of-audio hallucination loops on supported backends:
+
+```bash
+.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
+  --hallucination-silence-threshold 2.0
+```
+
+Set `--hallucination-silence-threshold 0` to disable it.
+
 Use a different `faster-whisper` compute type:
 
 ```bash
@@ -113,6 +124,12 @@ Override the MLX repo naming pattern if needed:
 .venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
   --mlx-prefix mlx-community/whisper- \
   --mlx-suffix -mlx
+```
+
+Download only selected model weights:
+
+```bash
+.venv/bin/python download_models.py --mlx-whisper --models tiny large-v3
 ```
 
 ## Output
@@ -135,14 +152,17 @@ It also writes:
 - `metadata`: benchmark configuration and machine details
 - full transcript text and optional per-run `wer` / `cer`
 
+Unsupported backend/model combinations are skipped and do not appear in the summary.
+
 ## Notes on fairness
 
 - Keep the same audio file, language setting, and task across both backends.
 - Run benchmarks sequentially, not in parallel.
 - Use one backend at a time, one model at a time, and one language file at a time.
 - The benchmark passes the overlapping knobs that are available across backends, including `language`, `task`, and `condition_on_previous_text`, but exact decoding parity is still not possible across all implementations.
+- `--hallucination-silence-threshold` is supported by `faster-whisper`, `mlx-whisper`, `lightning-whisper-mlx`, and `openai-whisper`. It is not supported by `mlx-audio` or `insanely-fast-whisper`.
 - `mlx-audio` only supports the overlapping Whisper-style model repos configured in this benchmark: `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`.
-- `lightning-whisper-mlx` only supports the overlapping model names configured in this benchmark: `tiny`, `base`, `small`, `medium`, and `large-v3`. It does not support `large-v3-turbo`.
+- `lightning-whisper-mlx` supports `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`. In this benchmark `large-v3-turbo` is loaded from `mlx-community/whisper-turbo` because the standard MLX turbo repo format used by other backends is not directly compatible with `lightning-whisper-mlx`.
 - `insanely-fast-whisper` uses Hugging Face Whisper checkpoints like `openai/whisper-medium` and `openai/whisper-large-v3-turbo` rather than the CTranslate2 or MLX model formats used by the other backends.
 - `openai-whisper` uses Whisper model names like `tiny`, `base`, `small`, `medium`, and `turbo`; in this benchmark `large-v3-turbo` is mapped to `turbo`.
 - The first run may include model downloads and backend-specific compile or JIT overhead. For cleaner comparisons, run once to populate caches, then run the benchmark again.
