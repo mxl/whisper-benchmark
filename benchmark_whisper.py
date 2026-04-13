@@ -497,10 +497,12 @@ def run_mlx_audio(
         condition_on_previous_text=args.condition_on_previous_text,
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
-    transcript = (getattr(result, "text", None) or result.get("text") or "").strip()
-    detected_language = getattr(result, "language", None)
-    if detected_language is None and isinstance(result, dict):
+    if isinstance(result, dict):
+        transcript = (result.get("text") or "").strip()
         detected_language = result.get("language")
+    else:
+        transcript = (getattr(result, "text", None) or "").strip()
+        detected_language = getattr(result, "language", None)
 
     return build_run_result(
         backend="mlx-audio",
