@@ -45,6 +45,7 @@ LIGHTNING_WHISPER_MLX_MODELS = {
     "small": "small",
     "medium": "medium",
     "large-v3": "large-v3",
+    "large-v3-turbo": "large-v3-turbo",
 }
 INSANELY_FAST_WHISPER_REPOS = {
     "tiny": "openai/whisper-tiny",
@@ -53,6 +54,14 @@ INSANELY_FAST_WHISPER_REPOS = {
     "medium": "openai/whisper-medium",
     "large-v3": "openai/whisper-large-v3",
     "large-v3-turbo": "openai/whisper-large-v3-turbo",
+}
+BACKEND_SUPPORTED_MODELS: dict[str, set[str] | None] = {
+    "faster-whisper": None,
+    "mlx-whisper": None,
+    "mlx-audio": set(MLX_AUDIO_WHISPER_REPOS),
+    "lightning-whisper-mlx": set(LIGHTNING_WHISPER_MLX_MODELS),
+    "insanely-fast-whisper": set(INSANELY_FAST_WHISPER_REPOS),
+    "openai-whisper": set(OPENAI_WHISPER_REPOS),
 }
 
 
@@ -180,6 +189,14 @@ def parse_args() -> argparse.Namespace:
         dest="openai_whisper_temperature_fallback",
         action="store_false",
         help="Disable openai-whisper temperature fallback and use temperature=0.",
+    )
+    parser.add_argument(
+        "--hallucination-silence-threshold",
+        type=float,
+        default=2.0,
+        help="Skip silent periods longer than this (seconds) when a possible hallucination is detected. "
+        "Supported by faster-whisper, mlx-whisper, openai-whisper, and lightning-whisper-mlx. "
+        "Set to 0 to disable.",
     )
     parser.add_argument(
         "--device",
@@ -383,6 +400,7 @@ def run_faster_whisper(
     load_seconds: float | None,
 ) -> RunResult:
     transcribe_started = time.perf_counter()
+    hal_threshold = args.hallucination_silence_threshold or None
     segments, info = session.transcribe(
         str(audio_path),
         beam_size=args.beam_size,
@@ -390,6 +408,8 @@ def run_faster_whisper(
         task=args.task,
         vad_filter=args.faster_whisper_vad_filter,
         condition_on_previous_text=args.condition_on_previous_text,
+        word_timestamps=hal_threshold is not None,
+        hallucination_silence_threshold=hal_threshold,
     )
     # faster-whisper yields segments lazily, so timing must include iteration.
     transcript = "".join(segment.text for segment in segments).strip()
@@ -418,12 +438,15 @@ def run_mlx_whisper(
     import mlx_whisper
 
     transcribe_started = time.perf_counter()
+    hal_threshold = args.hallucination_silence_threshold or None
     result = mlx_whisper.transcribe(
         str(audio_path),
         path_or_hf_repo=session["model_repo"],
         language=args.language,
         task=args.task,
         condition_on_previous_text=args.condition_on_previous_text,
+        word_timestamps=hal_threshold is not None,
+        hallucination_silence_threshold=hal_threshold,
         fp16=True,
         verbose=False,
     )
@@ -526,6 +549,7 @@ def run_lightning_whisper_mlx(
 ) -> RunResult:
     from lightning_whisper_mlx.transcribe import transcribe_audio
 
+    hal_threshold = args.hallucination_silence_threshold or None
     transcribe_started = time.perf_counter()
     result = transcribe_audio(
         str(audio_path),
@@ -534,6 +558,8 @@ def run_lightning_whisper_mlx(
         task=args.task,
         condition_on_previous_text=args.condition_on_previous_text,
         batch_size=args.lightning_whisper_mlx_batch_size,
+        word_timestamps=hal_threshold is not None,
+        hallucination_silence_threshold=hal_threshold,
         fp16=True,
         verbose=False,
     )
@@ -559,6 +585,7 @@ def lightning_model_repo(model_name: str, quant: str | None) -> str:
         "small": "mlx-community/whisper-small-mlx",
         "medium": "mlx-community/whisper-medium-mlx",
         "large-v3": "mlx-community/whisper-large-v3-mlx",
+        "large-v3-turbo": "mlx-community/whisper-turbo",
     }
     quantized = {
         "tiny": {
@@ -600,6 +627,7 @@ def run_openai_whisper(
         if args.openai_whisper_temperature_fallback
         else 0
     )
+    hal_threshold = args.hallucination_silence_threshold or None
     transcribe_started = time.perf_counter()
     result = session.transcribe(
         str(audio_path),
@@ -609,6 +637,8 @@ def run_openai_whisper(
         temperature=temperature,
         best_of=None,
         condition_on_previous_text=args.condition_on_previous_text,
+        word_timestamps=hal_threshold is not None,
+        hallucination_silence_threshold=hal_threshold,
         verbose=False,
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
@@ -1041,6 +1071,7 @@ def build_metadata(
         "device": args.device,
         "faster_whisper_vad_filter": args.faster_whisper_vad_filter,
         "condition_on_previous_text": args.condition_on_previous_text,
+        "hallucination_silence_threshold": args.hallucination_silence_threshold,
         "openai_whisper_temperature_fallback": args.openai_whisper_temperature_fallback,
         "mlx_prefix": args.mlx_prefix,
         "mlx_suffix": args.mlx_suffix,
@@ -1067,6 +1098,13 @@ def main() -> int:
     results: list[RunResult] = []
     for model_name in args.models:
         for backend in args.backends:
+            supported = BACKEND_SUPPORTED_MODELS.get(backend)
+            if supported is not None and model_name not in supported:
+                print(
+                    f"Skipping {backend} on model {model_name} (not supported).",
+                    file=sys.stderr,
+                )
+                continue
             print(f"Benchmarking {backend} on model {model_name}...", file=sys.stderr)
             try:
                 backend_session = load_backend_session(backend, model_name, args)
