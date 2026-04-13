@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "stt-benchmark"
 version = "0.1.0"
 description = "Benchmark speech-to-text engines on the same audio samples"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 dependencies = [
     "faster-whisper>=1.1.0",
     "mlx-whisper>=0.4.3",
@@ -15,6 +15,7 @@ dependencies = [
     "insanely-fast-whisper>=0.0.15",
     "openai-whisper>=20250625",
     "jiwer>=3.0.5",
+    "torchcodec>=0.10,<0.11",
 ]
 
 [project.scripts]
