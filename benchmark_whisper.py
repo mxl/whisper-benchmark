@@ -156,39 +156,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--faster-whisper-vad-filter",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="Enable faster-whisper VAD filter to drop silence and reduce hallucinations.",
     )
     parser.add_argument(
-        "--no-faster-whisper-vad-filter",
-        dest="faster_whisper_vad_filter",
-        action="store_false",
-        help="Disable the faster-whisper VAD filter.",
-    )
-    parser.add_argument(
         "--condition-on-previous-text",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="Condition each window on previously decoded text (improves long-form context).",
     )
     parser.add_argument(
-        "--no-condition-on-previous-text",
-        dest="condition_on_previous_text",
-        action="store_false",
-        help="Disable conditioning on previously decoded text.",
-    )
-    parser.add_argument(
         "--openai-whisper-temperature-fallback",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="Enable openai-whisper temperature fallback (0.0..1.0) on low-confidence segments.",
-    )
-    parser.add_argument(
-        "--no-openai-whisper-temperature-fallback",
-        dest="openai_whisper_temperature_fallback",
-        action="store_false",
-        help="Disable openai-whisper temperature fallback and use temperature=0.",
     )
     parser.add_argument(
         "--hallucination-silence-threshold",
