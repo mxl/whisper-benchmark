@@ -131,6 +131,16 @@ Download only selected model weights:
 .venv/bin/python download_models.py --mlx-whisper --models tiny large-v3
 ```
 
+## Smoke Test
+
+Run a quick end-to-end sanity check against the prepared English sample:
+
+```bash
+.venv/bin/python3 smoke_test.py
+```
+
+This defaults to `mlx-whisper` with the `tiny` model and writes JSON output to `output/smoke_test_results.json`.
+
 ## Run Tests
 
 Run the unit test suite with:
