@@ -40,7 +40,14 @@ class ErrorResultTests(unittest.TestCase):
             backend_device="mlx",
             run_index=2,
             error="boom",
+            audio_path=Path("audio.mp3"),
+            sample_label="audio",
+            audio_duration_seconds=10.0,
+            forced_language="en",
         )
+        self.assertEqual(result.audio, "audio.mp3")
+        self.assertEqual(result.sample_label, "audio")
+        self.assertEqual(result.forced_language, "en")
         self.assertEqual(result.backend, "mlx-whisper")
         self.assertEqual(result.model, "tiny")
         self.assertEqual(result.backend_device, "mlx")
@@ -88,12 +95,11 @@ class OutputHelperTests(unittest.TestCase):
 
     def test_build_metadata_includes_current_benchmark_options(self) -> None:
         args = argparse.Namespace(
+            audios=["en", "ru"],
             models=["tiny", "large-v3"],
             backends=["mlx-whisper", "openai-whisper"],
             runs=2,
-            language="en",
             task="transcribe",
-            reference_transcript=Path("reference.txt"),
             beam_size=5,
             compute_type="default",
             device="auto",
@@ -108,21 +114,41 @@ class OutputHelperTests(unittest.TestCase):
             warmup=True,
             show_full_table=False,
         )
+        audio_inputs = [
+            benchmark_whisper.ResolvedAudioInput(
+                audio_path=Path("samples/en.mp3"),
+                reference_transcript_path=Path("samples/en.txt"),
+                reference_transcript_text="hello world",
+                forced_language="en",
+                selector_language="en",
+                sample_label="en_sample",
+                source="default-language",
+                audio_duration_seconds=12.5,
+            ),
+            benchmark_whisper.ResolvedAudioInput(
+                audio_path=Path("samples/ru.mp3"),
+                reference_transcript_path=Path("samples/ru.txt"),
+                reference_transcript_text="privet mir",
+                forced_language="ru",
+                selector_language="ru",
+                sample_label="ru_sample",
+                source="default-language",
+                audio_duration_seconds=13.5,
+            ),
+        ]
 
         metadata = benchmark_whisper.build_metadata(
-            args=args,
-            audio_path=Path("audio.mp3"),
-            audio_duration_seconds=12.5,
+            args=args, audio_inputs=audio_inputs
         )
 
-        self.assertEqual(metadata["audio"], "audio.mp3")
-        self.assertEqual(metadata["audio_duration_seconds"], 12.5)
+        self.assertEqual(metadata["audio_selectors"], ["en", "ru"])
+        self.assertEqual(len(metadata["audios"]), 2)
+        self.assertEqual(metadata["audios"][0]["audio"], "samples/en.mp3")
+        self.assertEqual(metadata["audios"][0]["forced_language"], "en")
         self.assertEqual(metadata["models"], ["tiny", "large-v3"])
         self.assertEqual(metadata["backends"], ["mlx-whisper", "openai-whisper"])
         self.assertEqual(metadata["runs"], 2)
-        self.assertEqual(metadata["language"], "en")
         self.assertEqual(metadata["task"], "transcribe")
-        self.assertEqual(metadata["reference_transcript"], "reference.txt")
         self.assertEqual(metadata["condition_on_previous_text"], False)
         self.assertEqual(metadata["hallucination_silence_threshold"], 2.0)
         self.assertEqual(metadata["warmup"], True)
@@ -134,6 +160,10 @@ class OutputHelperTests(unittest.TestCase):
 
     def test_aggregate_results_uses_load_seconds_key(self) -> None:
         result = benchmark_whisper.RunResult(
+            audio="samples/en.mp3",
+            sample_label="en_sample",
+            audio_duration_seconds=10.0,
+            forced_language="en",
             backend="mlx-whisper",
             model="tiny",
             backend_device="mlx",
@@ -152,14 +182,19 @@ class OutputHelperTests(unittest.TestCase):
             error=None,
         )
 
-        aggregated = benchmark_whisper.aggregate_results([result], 10.0)
+        aggregated = benchmark_whisper.aggregate_results([result])
 
         self.assertEqual(aggregated[0]["load_seconds"], 1.25)
         self.assertNotIn("avg_load_seconds", aggregated[0])
+        self.assertEqual(aggregated[0]["audio"], "samples/en.mp3")
+        self.assertEqual(aggregated[0]["forced_language"], "en")
 
     def test_print_summary_includes_backend_device_column(self) -> None:
         aggregated = [
             {
+                "audio": "samples/en.mp3",
+                "sample_label": "en_sample",
+                "forced_language": "en",
                 "backend": "mlx-whisper",
                 "backend_device": "mlx",
                 "model": "tiny",
@@ -183,10 +218,15 @@ class OutputHelperTests(unittest.TestCase):
         output = stdout.getvalue()
         self.assertIn("device", output)
         self.assertIn("mlx", output)
+        self.assertIn("en_sample", output)
 
     def test_print_runs_table_includes_per_run_details(self) -> None:
         results = [
             benchmark_whisper.RunResult(
+                audio="samples/en.mp3",
+                sample_label="en_sample",
+                audio_duration_seconds=10.0,
+                forced_language="en",
                 backend="mlx-whisper",
                 model="tiny",
                 backend_device="mlx",
@@ -212,6 +252,7 @@ class OutputHelperTests(unittest.TestCase):
 
         output = stdout.getvalue()
         self.assertIn("Runs:", output)
+        self.assertIn("en_sample", output)
         self.assertIn("mlx-whisper", output)
         self.assertIn("mlx", output)
         self.assertIn("ok", output)
@@ -235,7 +276,8 @@ class BenchmarkCliTests(unittest.TestCase):
             "sys.argv",
             [
                 "benchmark_whisper.py",
-                "audio.mp3",
+                "--audio",
+                "en",
                 "--no-faster-whisper-vad-filter",
                 "--no-condition-on-previous-text",
                 "--no-openai-whisper-temperature-fallback",
@@ -249,7 +291,8 @@ class BenchmarkCliTests(unittest.TestCase):
     def test_benchmark_parse_args_accepts_explicit_argv(self) -> None:
         args = benchmark_whisper.parse_args(
             [
-                "audio.mp3",
+                "--audio",
+                "en",
                 "--no-faster-whisper-vad-filter",
                 "--no-condition-on-previous-text",
                 "--no-openai-whisper-temperature-fallback",
@@ -264,22 +307,94 @@ class BenchmarkCliTests(unittest.TestCase):
             "sys.argv",
             [
                 "benchmark_whisper.py",
-                "audio.mp3",
+                "--audio",
+                "en",
                 "--show-full-table",
             ],
         ):
             args = benchmark_whisper.parse_args()
         self.assertTrue(args.show_full_table)
 
+    def test_resolve_audio_inputs_defaults_to_all_bundled_samples(self) -> None:
+        args = argparse.Namespace(audios=[])
+        with (
+            mock.patch.object(
+                benchmark_whisper,
+                "ensure_audio_file",
+                side_effect=lambda path: path.resolve(),
+            ),
+            mock.patch.object(
+                benchmark_whisper,
+                "load_reference_transcript",
+                side_effect=lambda path: f"normalized:{path.name}",
+            ),
+            mock.patch.object(
+                benchmark_whisper,
+                "get_audio_duration_seconds",
+                side_effect=lambda _path: 10.0,
+            ),
+        ):
+            resolved = benchmark_whisper.resolve_audio_inputs(args)
+
+        self.assertEqual([item.selector_language for item in resolved], ["en", "ru"])
+        self.assertEqual([item.forced_language for item in resolved], ["en", "ru"])
+
+    def test_resolve_audio_inputs_auto_applies_to_all_defaults(self) -> None:
+        args = argparse.Namespace(audios=["auto"])
+        with (
+            mock.patch.object(
+                benchmark_whisper,
+                "ensure_audio_file",
+                side_effect=lambda path: path.resolve(),
+            ),
+            mock.patch.object(
+                benchmark_whisper,
+                "load_reference_transcript",
+                side_effect=lambda path: f"normalized:{path.name}",
+            ),
+            mock.patch.object(
+                benchmark_whisper,
+                "get_audio_duration_seconds",
+                side_effect=lambda _path: 10.0,
+            ),
+        ):
+            resolved = benchmark_whisper.resolve_audio_inputs(args)
+
+        self.assertEqual([item.forced_language for item in resolved], [None, None])
+
+    def test_resolve_audio_inputs_specific_forced_language_beats_auto(self) -> None:
+        args = argparse.Namespace(audios=["auto", "ru"])
+        with (
+            mock.patch.object(
+                benchmark_whisper,
+                "ensure_audio_file",
+                side_effect=lambda path: path.resolve(),
+            ),
+            mock.patch.object(
+                benchmark_whisper,
+                "load_reference_transcript",
+                side_effect=lambda path: f"normalized:{path.name}",
+            ),
+            mock.patch.object(
+                benchmark_whisper,
+                "get_audio_duration_seconds",
+                side_effect=lambda _path: 10.0,
+            ),
+        ):
+            resolved = benchmark_whisper.resolve_audio_inputs(args)
+
+        by_language = {item.selector_language: item for item in resolved}
+        self.assertIsNone(by_language["en"].forced_language)
+        self.assertEqual(by_language["ru"].forced_language, "ru")
+
     def test_main_skips_unsupported_backend_model_combo(self) -> None:
         output_path = Path("/tmp/test-output.json")
         written_payload: dict[str, object] = {}
         fake_args = argparse.Namespace(
-            audio=Path("audio.mp3"),
+            audios=["en"],
             models=["large-v3-turbo"],
             backends=["lightning-whisper-mlx"],
             runs=1,
-            language="en",
             task="transcribe",
             beam_size=5,
             compute_type="default",
@@ -289,7 +404,6 @@ class BenchmarkCliTests(unittest.TestCase):
             hallucination_silence_threshold=2.0,
             device="auto",
             output=output_path,
-            reference_transcript=None,
             warmup=False,
             insanely_fast_whisper_device_id="mps",
             insanely_fast_whisper_batch_size=1,
@@ -308,13 +422,20 @@ class BenchmarkCliTests(unittest.TestCase):
                 return_value=output_path,
             ),
             mock.patch.object(
-                benchmark_whisper, "ensure_audio_file", return_value=Path("audio.mp3")
-            ),
-            mock.patch.object(
-                benchmark_whisper, "get_audio_duration_seconds", return_value=1.0
-            ),
-            mock.patch.object(
-                benchmark_whisper, "load_reference_transcript", return_value=None
+                benchmark_whisper,
+                "resolve_audio_inputs",
+                return_value=[
+                    benchmark_whisper.ResolvedAudioInput(
+                        audio_path=Path("audio.mp3"),
+                        reference_transcript_path=None,
+                        reference_transcript_text=None,
+                        forced_language="en",
+                        selector_language="en",
+                        sample_label="audio",
+                        source="default-language",
+                        audio_duration_seconds=1.0,
+                    )
+                ],
             ),
             mock.patch.object(
                 benchmark_whisper,
@@ -342,13 +463,16 @@ class BenchmarkCliTests(unittest.TestCase):
             ["metadata", "skipped", "summary", "runs"],
         )
         self.assertIn(
-            "Skipping lightning-whisper-mlx on model large-v3-turbo (not supported).",
+            "Skipping lightning-whisper-mlx on sample audio model large-v3-turbo (not supported).",
             stderr.getvalue(),
         )
         self.assertEqual(
             written_payload["skipped"],
             [
                 {
+                    "audio": "audio.mp3",
+                    "sample_label": "audio",
+                    "forced_language": "en",
                     "backend": "lightning-whisper-mlx",
                     "model": "large-v3-turbo",
                     "reason": "not supported",
@@ -366,11 +490,10 @@ class BenchmarkCliTests(unittest.TestCase):
     def test_main_prints_runs_table_before_summary_when_enabled(self) -> None:
         output_path = Path("/tmp/test-output.json")
         fake_args = argparse.Namespace(
-            audio=Path("audio.mp3"),
+            audios=["en"],
             models=["tiny"],
             backends=["mlx-whisper"],
             runs=1,
-            language="en",
             task="transcribe",
             beam_size=5,
             compute_type="default",
@@ -380,7 +503,6 @@ class BenchmarkCliTests(unittest.TestCase):
             hallucination_silence_threshold=2.0,
             device="auto",
             output=output_path,
-            reference_transcript=None,
             warmup=False,
             insanely_fast_whisper_device_id="mps",
             insanely_fast_whisper_batch_size=1,
@@ -390,6 +512,10 @@ class BenchmarkCliTests(unittest.TestCase):
         )
 
         fake_result = benchmark_whisper.RunResult(
+            audio="audio.mp3",
+            sample_label="audio",
+            audio_duration_seconds=10.0,
+            forced_language="en",
             backend="mlx-whisper",
             model="tiny",
             backend_device="mlx",
@@ -417,13 +543,20 @@ class BenchmarkCliTests(unittest.TestCase):
                 return_value=output_path,
             ),
             mock.patch.object(
-                benchmark_whisper, "ensure_audio_file", return_value=Path("audio.mp3")
-            ),
-            mock.patch.object(
-                benchmark_whisper, "get_audio_duration_seconds", return_value=10.0
-            ),
-            mock.patch.object(
-                benchmark_whisper, "load_reference_transcript", return_value=None
+                benchmark_whisper,
+                "resolve_audio_inputs",
+                return_value=[
+                    benchmark_whisper.ResolvedAudioInput(
+                        audio_path=Path("audio.mp3"),
+                        reference_transcript_path=None,
+                        reference_transcript_text=None,
+                        forced_language="en",
+                        selector_language="en",
+                        sample_label="audio",
+                        source="default-language",
+                        audio_duration_seconds=10.0,
+                    )
+                ],
             ),
             mock.patch.object(
                 benchmark_whisper,
@@ -460,6 +593,8 @@ class BackendInvocationTests(unittest.TestCase):
             beam_size=5,
             condition_on_previous_text=True,
             reference_transcript_text=None,
+            sample_label="audio",
+            audio_duration_seconds=10.0,
         )
 
         captured_kwargs: dict[str, object] = {}
@@ -494,6 +629,8 @@ class BackendInvocationTests(unittest.TestCase):
             condition_on_previous_text=True,
             hallucination_silence_threshold=2.0,
             reference_transcript_text=None,
+            sample_label="audio",
+            audio_duration_seconds=10.0,
         )
 
         with mock.patch(
@@ -522,6 +659,8 @@ class BackendInvocationTests(unittest.TestCase):
             lightning_whisper_mlx_batch_size=12,
             hallucination_silence_threshold=2.0,
             reference_transcript_text=None,
+            sample_label="audio",
+            audio_duration_seconds=10.0,
         )
 
         with mock.patch(
@@ -580,15 +719,11 @@ class SmokeTestCliTests(unittest.TestCase):
             exit_code = smoke_test.main(
                 [
                     "--audio",
-                    "sample.mp3",
-                    "--reference-transcript",
-                    "sample.txt",
+                    "ru",
                     "--backend",
                     "mlx-whisper",
                     "--model",
                     "tiny",
-                    "--language",
-                    "en",
                     "--output",
                     "out.json",
                 ]
@@ -597,17 +732,14 @@ class SmokeTestCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         benchmark_main.assert_called_once_with(
             [
-                "sample.mp3",
+                "--audio",
+                "ru",
                 "--backends",
                 "mlx-whisper",
                 "--models",
                 "tiny",
                 "--runs",
                 "1",
-                "--language",
-                "en",
-                "--reference-transcript",
-                "sample.txt",
                 "--output",
                 "out.json",
             ]
@@ -625,10 +757,10 @@ class UnifiedCliTests(unittest.TestCase):
         with mock.patch.object(
             benchmark_whisper, "main", return_value=0
         ) as command_main:
-            exit_code = stt_cli.main(["benchmark", "audio.mp3", "--runs", "2"])
+            exit_code = stt_cli.main(["benchmark", "--audio", "en", "--runs", "2"])
 
         self.assertEqual(exit_code, 0)
-        command_main.assert_called_once_with(["audio.mp3", "--runs", "2"])
+        command_main.assert_called_once_with(["--audio", "en", "--runs", "2"])
 
     def test_cli_dispatches_download_models_subcommand(self) -> None:
         with mock.patch.object(download_models, "main", return_value=0) as command_main:

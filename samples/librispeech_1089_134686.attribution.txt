@@ -1,0 +1,1 @@
+LibriSpeech test-clean, speaker 1089 chapter 134686. V. Panayotov et al., ICASSP 2015. License: CC BY 4.0. https://openslr.org/12/

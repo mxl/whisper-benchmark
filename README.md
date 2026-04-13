@@ -2,6 +2,8 @@
 
 This repo benchmarks speech-to-text engines on the same audio files. Today it includes `faster-whisper`, `mlx-whisper`, `mlx-audio`, `lightning-whisper-mlx`, `insanely-fast-whisper`, and `openai-whisper`.
 
+The repo ships bundled English and Russian benchmark samples. The `.mp3` sample assets are stored with Git LFS; transcripts and attribution files are regular Git files.
+
 ## What it measures
 
 - `faster-whisper`: model load time and transcription time separately
@@ -55,16 +57,16 @@ By default, MLX model repos are resolved as `mlx-community/whisper-<model>-mlx`,
 
 ## Run the benchmark
 
-Basic run across `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`:
+With no `--audio` arguments, the benchmark runs against all bundled default samples and forces each sample's language:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3
+uv run stt-benchmark benchmark
 ```
 
 Run two repetitions and add warmup:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 \
+uv run stt-benchmark benchmark \
   --runs 2 \
   --warmup \
   --output results.json
@@ -73,62 +75,74 @@ uv run stt-benchmark benchmark /path/to/audio.mp3 \
 Print the full per-run table before the summary table:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --show-full-table
+uv run stt-benchmark benchmark --show-full-table
+```
+
+Run only the bundled English sample with forced English:
+
+```bash
+uv run stt-benchmark benchmark --audio en
+```
+
+Run all bundled samples with language autodetection instead of forcing a language:
+
+```bash
+uv run stt-benchmark benchmark --audio auto
+```
+
+Mix selectors so that specific sample language settings override `auto`:
+
+```bash
+uv run stt-benchmark benchmark --audio auto --audio ru
+```
+
+Benchmark a custom audio file with a reference transcript:
+
+```bash
+uv run stt-benchmark benchmark \
+  --audio en:/path/to/audio.mp3:/path/to/reference.txt
 ```
 
 Only benchmark selected models:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --models tiny base small
+uv run stt-benchmark benchmark --audio en --models tiny base small
 ```
 
 Only benchmark one backend:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --backends faster-whisper
+uv run stt-benchmark benchmark --audio en --backends faster-whisper
 ```
 
 Benchmark only insanely-fast-whisper:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --backends insanely-fast-whisper
+uv run stt-benchmark benchmark --audio en --backends insanely-fast-whisper
 ```
 
 Benchmark only openai-whisper:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --backends openai-whisper
+uv run stt-benchmark benchmark --audio en --backends openai-whisper
 ```
 
 Benchmark only mlx-audio:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --backends mlx-audio
+uv run stt-benchmark benchmark --audio en --backends mlx-audio
 ```
 
 Benchmark only lightning-whisper-mlx:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --backends lightning-whisper-mlx
-```
-
-Force English transcription:
-
-```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --language en
-```
-
-Score against a ground-truth transcript:
-
-```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 \
-  --reference-transcript /path/to/reference.txt
+uv run stt-benchmark benchmark --audio en --backends lightning-whisper-mlx
 ```
 
 Reduce end-of-audio hallucination loops on supported backends:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 \
+uv run stt-benchmark benchmark --audio en \
   --hallucination-silence-threshold 2.0
 ```
 
@@ -137,7 +151,7 @@ Set `--hallucination-silence-threshold 0` to disable it.
 Use a different `faster-whisper` compute type:
 
 ```bash
-uv run stt-benchmark benchmark /path/to/audio.mp3 --compute-type int8 --device cpu
+uv run stt-benchmark benchmark --audio en --compute-type int8 --device cpu
 ```
 
 Download only selected model weights:
@@ -148,13 +162,13 @@ uv run stt-benchmark download-models --mlx-whisper --models tiny large-v3
 
 ## Smoke Test
 
-Run a quick end-to-end sanity check against the prepared English sample:
+Run a quick end-to-end sanity check against the bundled English sample:
 
 ```bash
 uv run stt-benchmark smoke-test
 ```
 
-This defaults to `mlx-whisper` with the `tiny` model and writes JSON output to `output/smoke_test_results.json`.
+This defaults to `mlx-whisper` with the `tiny` model on the bundled English sample and writes JSON output to `output/smoke_test_results.json`.
 
 ## Run Tests
 
@@ -169,19 +183,19 @@ Run the unit test suite with:
 The script prints a summary table like:
 
 ```text
-backend         device  model      ok    avg_total_s   median_total_s   load_s   avg_transcribe_s
-faster-whisper  cpu     tiny       3/3   1.234         1.210            0.456    0.778
-mlx-whisper     mlx     tiny       3/3   0.987         0.981            0.123    0.864
+audio                  lang  backend         device  model  ok   avg_total_s  median_total_s  load_s  avg_transcribe_s
+librispeech_1089_134686  en    faster-whisper  cpu     tiny   3/3  1.234        1.210           0.456   0.778
+ruls_sample_8169_13240   ru    mlx-whisper     mlx     tiny   3/3  0.987        0.981           0.123   0.864
 ```
 
-When `--reference-transcript` is provided, the summary also includes `avg_wer` and `avg_cer`.
+When a sample has a reference transcript, the summary also includes `avg_wer` and `avg_cer`.
 WER and CER are computed with `jiwer` after a fixed multilingual-safe normalization step: Unicode NFKC normalization, lowercasing, punctuation removal, and whitespace collapsing.
 
 When `--show-full-table` is enabled, the script first prints one row per timed run and then prints the aggregated summary table.
 
 It also writes:
 
-- `summary`: aggregated stats per backend/model pair
+- `summary`: aggregated stats per audio/backend/model combination
 - `runs`: one row per timed run
 - `metadata`: benchmark configuration and machine details
 - full transcript text and optional per-run `wer` / `cer`

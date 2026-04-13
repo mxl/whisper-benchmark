@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import platform
 import re
@@ -63,10 +64,29 @@ INSANELY_FAST_WHISPER_REPOS = {
     "large-v3": "openai/whisper-large-v3",
     "large-v3-turbo": "openai/whisper-large-v3-turbo",
 }
+DEFAULT_SAMPLES = {
+    "en": {
+        "audio": Path("samples/librispeech_1089_134686.mp3"),
+        "reference_transcript": Path("samples/librispeech_1089_134686.txt"),
+        "attribution": Path("samples/librispeech_1089_134686.attribution.txt"),
+        "sample_label": "librispeech_1089_134686",
+    },
+    "ru": {
+        "audio": Path("samples/ruls_sample_8169_13240.mp3"),
+        "reference_transcript": Path("samples/ruls_sample_8169_13240.txt"),
+        "attribution": Path("samples/ruls_sample_8169_13240.attribution.txt"),
+        "sample_label": "ruls_sample_8169_13240",
+    },
+}
+DEFAULT_SAMPLE_LANGUAGES = tuple(sorted(DEFAULT_SAMPLES))
 
 
 @dataclass
 class RunResult:
+    audio: str
+    sample_label: str
+    audio_duration_seconds: float
+    forced_language: str | None
     backend: str
     model: str
     backend_device: str | None
@@ -96,9 +116,24 @@ class BackendSession:
 
 @dataclass
 class SkippedBenchmark:
+    audio: str
+    sample_label: str
+    forced_language: str | None
     backend: str
     model: str
     reason: str
+
+
+@dataclass(frozen=True)
+class ResolvedAudioInput:
+    audio_path: Path
+    reference_transcript_path: Path | None
+    reference_transcript_text: str | None
+    forced_language: str | None
+    selector_language: str
+    sample_label: str
+    source: str
+    audio_duration_seconds: float
 
 
 @dataclass(frozen=True)
@@ -139,7 +174,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Benchmark multiple Whisper backends across multiple model sizes."
     )
-    parser.add_argument("audio", type=Path, help="Path to an input audio file.")
+    parser.add_argument(
+        "--audio",
+        dest="audios",
+        action="append",
+        default=[],
+        help=(
+            "Audio selector. Use <language> for a bundled sample, auto for all bundled "
+            "samples with language autodetection, or <language>:<audio path>:<reference "
+            "transcript path> for a custom sample. Repeatable."
+        ),
+    )
     parser.add_argument(
         "--models",
         nargs="+",
@@ -172,11 +217,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=3,
         help="Number of timed runs per backend/model pair.",
-    )
-    parser.add_argument(
-        "--language",
-        default=None,
-        help="Optional language code to force transcription language.",
     )
     parser.add_argument(
         "--task",
@@ -233,12 +273,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to write JSON results. Defaults to a timestamped filename.",
     )
     parser.add_argument(
-        "--reference-transcript",
-        type=Path,
-        default=None,
-        help="Optional path to a ground-truth transcript for WER/CER scoring.",
-    )
-    parser.add_argument(
         "--warmup",
         action="store_true",
         help="Run one untimed transcription warmup per backend/model before timed runs.",
@@ -271,6 +305,146 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Batch size passed to lightning-whisper-mlx.",
     )
     return parser.parse_args(argv)
+
+
+def parse_audio_spec(value: str) -> tuple[str, Path | None, Path | None]:
+    if value == "auto":
+        return "auto", None, None
+    if ":" not in value:
+        return value, None, None
+    language, remainder = value.split(":", 1)
+    if not language:
+        raise ValueError(f"Invalid audio spec: {value}")
+    if remainder.startswith("/"):
+        split_token = ":/"
+        split_index = remainder.rfind(split_token)
+        if split_index == -1:
+            raise ValueError(
+                f"Custom audio spec must be <language>:<audio path>:<reference transcript path>: {value}"
+            )
+        audio_part = remainder[:split_index]
+        reference_part = remainder[split_index + 1 :]
+    else:
+        parts = remainder.split(":", 1)
+        if len(parts) != 2:
+            raise ValueError(
+                f"Custom audio spec must be <language>:<audio path>:<reference transcript path>: {value}"
+            )
+        audio_part, reference_part = parts
+    if not audio_part or not reference_part:
+        raise ValueError(
+            f"Custom audio spec must be <language>:<audio path>:<reference transcript path>: {value}"
+        )
+    return language, Path(audio_part), Path(reference_part)
+
+
+def validate_audio_selector_language(language: str) -> None:
+    if language == "auto":
+        return
+    if language in DEFAULT_SAMPLES:
+        return
+    if not re.fullmatch(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*", language):
+        raise ValueError(
+            f"Invalid audio selector language '{language}'. Use a language code or 'auto'."
+        )
+
+
+def resolve_audio_inputs(args: argparse.Namespace) -> list[ResolvedAudioInput]:
+    def resolve_default_sample(
+        language: str, source: str, forced_language: str | None
+    ) -> ResolvedAudioInput:
+        sample = DEFAULT_SAMPLES[language]
+        audio_path = ensure_audio_file(sample["audio"])
+        reference_path = sample["reference_transcript"].resolve()
+        return ResolvedAudioInput(
+            audio_path=audio_path,
+            reference_transcript_path=reference_path,
+            reference_transcript_text=load_reference_transcript(reference_path),
+            forced_language=forced_language,
+            selector_language=language,
+            sample_label=sample["sample_label"],
+            source=source,
+            audio_duration_seconds=get_audio_duration_seconds(audio_path),
+        )
+
+    def resolve_custom_sample(
+        language: str,
+        audio_path: Path,
+        reference_transcript_path: Path,
+    ) -> ResolvedAudioInput:
+        resolved_audio = ensure_audio_file(audio_path)
+        resolved_reference = reference_transcript_path.resolve()
+        return ResolvedAudioInput(
+            audio_path=resolved_audio,
+            reference_transcript_path=resolved_reference,
+            reference_transcript_text=load_reference_transcript(resolved_reference),
+            forced_language=None if language == "auto" else language,
+            selector_language=language,
+            sample_label=resolved_audio.stem,
+            source="explicit",
+            audio_duration_seconds=get_audio_duration_seconds(resolved_audio),
+        )
+
+    resolved: dict[str, tuple[int, ResolvedAudioInput]] = {}
+
+    def add_entry(priority: int, entry: ResolvedAudioInput) -> None:
+        key = str(entry.audio_path)
+        current = resolved.get(key)
+        if current is None or priority >= current[0]:
+            resolved[key] = (priority, entry)
+
+    selectors = args.audios or []
+    if not selectors:
+        for language in DEFAULT_SAMPLE_LANGUAGES:
+            add_entry(
+                2,
+                resolve_default_sample(
+                    language=language,
+                    source="default-language",
+                    forced_language=language,
+                ),
+            )
+        return [
+            entry
+            for _, entry in sorted(
+                resolved.values(), key=lambda item: item[1].sample_label
+            )
+        ]
+
+    for selector in selectors:
+        language, audio_path, reference_path = parse_audio_spec(selector)
+        validate_audio_selector_language(language)
+        if language == "auto" and audio_path is None:
+            for default_language in DEFAULT_SAMPLE_LANGUAGES:
+                add_entry(
+                    1,
+                    resolve_default_sample(
+                        language=default_language,
+                        source="default-auto",
+                        forced_language=None,
+                    ),
+                )
+            continue
+        if audio_path is None:
+            if language not in DEFAULT_SAMPLES:
+                raise ValueError(
+                    f"No bundled sample is configured for language '{language}'."
+                )
+            add_entry(
+                2,
+                resolve_default_sample(
+                    language=language,
+                    source="default-language",
+                    forced_language=language,
+                ),
+            )
+            continue
+        add_entry(3, resolve_custom_sample(language, audio_path, reference_path))
+
+    return [
+        entry
+        for _, entry in sorted(resolved.values(), key=lambda item: item[1].sample_label)
+    ]
 
 
 def ensure_audio_file(audio_path: Path) -> Path:
@@ -374,10 +548,18 @@ def build_run_result(
     detected_language: str | None,
     detected_language_probability: float | None,
     reference_transcript: str | None,
+    audio_path: Path,
+    sample_label: str,
+    audio_duration_seconds: float,
+    forced_language: str | None,
 ) -> RunResult:
     chars, words = summarize_text(transcript)
     wer, cer = score_transcript(transcript, reference_transcript)
     return RunResult(
+        audio=str(audio_path),
+        sample_label=sample_label,
+        audio_duration_seconds=audio_duration_seconds,
+        forced_language=forced_language,
         backend=backend,
         model=model_name,
         backend_device=None,
@@ -404,8 +586,16 @@ def build_error_result(
     backend_device: str | None,
     run_index: int,
     error: str,
+    audio_path: Path,
+    sample_label: str,
+    audio_duration_seconds: float,
+    forced_language: str | None,
 ) -> RunResult:
     return RunResult(
+        audio=str(audio_path),
+        sample_label=sample_label,
+        audio_duration_seconds=audio_duration_seconds,
+        forced_language=forced_language,
         backend=backend,
         model=model_name,
         backend_device=backend_device,
@@ -423,6 +613,16 @@ def build_error_result(
         status="error",
         error=error,
     )
+
+
+def args_for_audio_input(
+    args: argparse.Namespace, audio_input: ResolvedAudioInput
+) -> argparse.Namespace:
+    per_audio_args = copy.copy(args)
+    per_audio_args.language = audio_input.forced_language
+    per_audio_args.reference_transcript = audio_input.reference_transcript_path
+    per_audio_args.reference_transcript_text = audio_input.reference_transcript_text
+    return per_audio_args
 
 
 def hallucination_silence_threshold_for_backend(
@@ -467,6 +667,10 @@ def run_faster_whisper(
         detected_language=getattr(info, "language", None),
         detected_language_probability=getattr(info, "language_probability", None),
         reference_transcript=args.reference_transcript_text,
+        audio_path=audio_path,
+        sample_label=args.sample_label,
+        audio_duration_seconds=args.audio_duration_seconds,
+        forced_language=args.language,
     )
 
 
@@ -505,6 +709,10 @@ def run_mlx_whisper(
         detected_language=result.get("language"),
         detected_language_probability=result.get("language_probability"),
         reference_transcript=args.reference_transcript_text,
+        audio_path=audio_path,
+        sample_label=args.sample_label,
+        audio_duration_seconds=args.audio_duration_seconds,
+        forced_language=args.language,
     )
 
 
@@ -542,6 +750,10 @@ def run_insanely_fast_whisper(
         detected_language=outputs.get("language") or result.get("language"),
         detected_language_probability=None,
         reference_transcript=args.reference_transcript_text,
+        audio_path=audio_path,
+        sample_label=args.sample_label,
+        audio_duration_seconds=args.audio_duration_seconds,
+        forced_language=args.language,
     )
 
 
@@ -584,6 +796,10 @@ def run_mlx_audio(
         detected_language=detected_language,
         detected_language_probability=None,
         reference_transcript=args.reference_transcript_text,
+        audio_path=audio_path,
+        sample_label=args.sample_label,
+        audio_duration_seconds=args.audio_duration_seconds,
+        forced_language=args.language,
     )
 
 
@@ -625,6 +841,10 @@ def run_lightning_whisper_mlx(
         detected_language=result.get("language"),
         detected_language_probability=None,
         reference_transcript=args.reference_transcript_text,
+        audio_path=audio_path,
+        sample_label=args.sample_label,
+        audio_duration_seconds=args.audio_duration_seconds,
+        forced_language=args.language,
     )
 
 
@@ -680,6 +900,10 @@ def run_openai_whisper(
         detected_language=detected_language,
         detected_language_probability=detected_language_probability,
         reference_transcript=args.reference_transcript_text,
+        audio_path=audio_path,
+        sample_label=args.sample_label,
+        audio_duration_seconds=args.audio_duration_seconds,
+        forced_language=args.language,
     )
 
 
@@ -870,6 +1094,10 @@ def run_single_backend(
             backend_device=backend_session.device,
             run_index=run_index,
             error="".join(traceback.format_exception_only(type(exc), exc)).strip(),
+            audio_path=audio_path,
+            sample_label=args.sample_label,
+            audio_duration_seconds=args.audio_duration_seconds,
+            forced_language=args.language,
         )
 
 
@@ -892,15 +1120,15 @@ def maybe_warmup(
         )
 
 
-def aggregate_results(
-    results: list[RunResult], audio_duration_seconds: float
-) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str], list[RunResult]] = {}
+def aggregate_results(results: list[RunResult]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], list[RunResult]] = {}
     for result in results:
-        grouped.setdefault((result.backend, result.model), []).append(result)
+        grouped.setdefault((result.audio, result.backend, result.model), []).append(
+            result
+        )
 
     aggregated: list[dict[str, Any]] = []
-    for (backend, model), group in sorted(grouped.items()):
+    for (audio, backend, model), group in sorted(grouped.items()):
         ok_runs = [
             item
             for item in group
@@ -922,6 +1150,10 @@ def aggregate_results(
 
         aggregated.append(
             {
+                "audio": audio,
+                "sample_label": group[-1].sample_label,
+                "forced_language": group[-1].forced_language,
+                "audio_duration_seconds": group[-1].audio_duration_seconds,
                 "backend": backend,
                 "model": model,
                 "backend_device": ok_runs[-1].backend_device if ok_runs else None,
@@ -936,8 +1168,8 @@ def aggregate_results(
                 "avg_transcribe_seconds": mean_or_none(transcribe_values),
                 "stddev_transcribe_seconds": stdev_or_none(transcribe_values),
                 "avg_rtf": (
-                    mean_or_none(transcribe_values) / audio_duration_seconds
-                    if transcribe_values and audio_duration_seconds > 0
+                    mean_or_none(transcribe_values) / group[-1].audio_duration_seconds
+                    if transcribe_values and group[-1].audio_duration_seconds > 0
                     else None
                 ),
                 "avg_wer": mean_or_none(wer_values),
@@ -976,6 +1208,8 @@ def stdev_or_none(values: list[float]) -> float | None:
 
 def print_summary(aggregated: list[dict[str, Any]]) -> None:
     headers = [
+        "audio",
+        "lang",
         "backend",
         "device",
         "model",
@@ -993,6 +1227,8 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
     for row in aggregated:
         rows.append(
             [
+                row["sample_label"],
+                row["forced_language"] or "auto",
                 row["backend"],
                 row.get("backend_device") or "-",
                 row["model"],
@@ -1019,6 +1255,8 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
     for row in rows:
         print("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
     print("\nColumns:")
+    print("audio: bundled sample label or custom audio stem")
+    print("lang: forced language code, or auto when autodetection is used")
     print("backend: benchmarked engine")
     print("device: device or runtime label reported by the backend")
     print("model: normalized model name requested by the benchmark")
@@ -1035,6 +1273,8 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
 
 def print_runs_table(results: list[RunResult]) -> None:
     headers = [
+        "audio",
+        "lang",
         "backend",
         "device",
         "model",
@@ -1053,12 +1293,14 @@ def print_runs_table(results: list[RunResult]) -> None:
         rtf = None
         if result.total_seconds is not None and result.transcribe_seconds is not None:
             rtf = (
-                result.transcribe_seconds / result.total_seconds
-                if result.total_seconds > 0
+                result.transcribe_seconds / result.audio_duration_seconds
+                if result.audio_duration_seconds > 0
                 else None
             )
         rows.append(
             [
+                result.sample_label,
+                result.forced_language or "auto",
                 result.backend,
                 result.backend_device or "-",
                 result.model,
@@ -1114,19 +1356,27 @@ def resolve_output_paths(output: Path | None) -> Path:
 
 
 def build_metadata(
-    args: argparse.Namespace, audio_path: Path, audio_duration_seconds: float
+    args: argparse.Namespace, audio_inputs: list[ResolvedAudioInput]
 ) -> dict[str, Any]:
     return {
-        "audio": str(audio_path),
-        "audio_duration_seconds": audio_duration_seconds,
+        "audios": [
+            {
+                "audio": str(item.audio_path),
+                "sample_label": item.sample_label,
+                "reference_transcript": str(item.reference_transcript_path)
+                if item.reference_transcript_path is not None
+                else None,
+                "forced_language": item.forced_language,
+                "audio_duration_seconds": item.audio_duration_seconds,
+                "source": item.source,
+            }
+            for item in audio_inputs
+        ],
         "models": args.models,
         "backends": args.backends,
         "runs": args.runs,
-        "language": args.language,
         "task": args.task,
-        "reference_transcript": str(args.reference_transcript)
-        if args.reference_transcript is not None
-        else None,
+        "audio_selectors": args.audios,
         "beam_size": args.beam_size,
         "compute_type": args.compute_type,
         "device": args.device,
@@ -1148,74 +1398,94 @@ def build_metadata(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     args.output = resolve_output_paths(args.output)
-    audio_path = ensure_audio_file(args.audio)
-    audio_duration_seconds = get_audio_duration_seconds(audio_path)
-    args.reference_transcript_text = load_reference_transcript(
-        args.reference_transcript
-    )
+    audio_inputs = resolve_audio_inputs(args)
 
     results: list[RunResult] = []
     skipped: list[SkippedBenchmark] = []
-    for model_name in args.models:
-        for backend in args.backends:
-            supported = BACKEND_CAPABILITIES[backend].supported_models
-            if supported is not None and model_name not in supported:
-                skipped.append(
-                    SkippedBenchmark(
-                        backend=backend,
-                        model=model_name,
-                        reason="not supported",
-                    )
-                )
-                print(
-                    f"Skipping {backend} on model {model_name} (not supported).",
-                    file=sys.stderr,
-                )
-                continue
-            print(f"Benchmarking {backend} on model {model_name}...", file=sys.stderr)
-            try:
-                backend_session = load_backend_session(backend, model_name, args)
-            except Exception as exc:  # pragma: no cover - benchmark scripts should continue after failures.
-                error = "".join(traceback.format_exception_only(type(exc), exc)).strip()
-                print(f"  load error: {error}", file=sys.stderr)
-                for run_index in range(1, args.runs + 1):
-                    results.append(
-                        build_error_result(
+    for audio_input in audio_inputs:
+        per_audio_args = args_for_audio_input(args, audio_input)
+        per_audio_args.sample_label = audio_input.sample_label
+        per_audio_args.audio_duration_seconds = audio_input.audio_duration_seconds
+        for model_name in args.models:
+            for backend in args.backends:
+                supported = BACKEND_CAPABILITIES[backend].supported_models
+                if supported is not None and model_name not in supported:
+                    skipped.append(
+                        SkippedBenchmark(
+                            audio=str(audio_input.audio_path),
+                            sample_label=audio_input.sample_label,
+                            forced_language=audio_input.forced_language,
                             backend=backend,
-                            model_name=model_name,
-                            backend_device=None,
-                            run_index=run_index,
-                            error=error,
+                            model=model_name,
+                            reason="not supported",
                         )
                     )
-                continue
-
-            maybe_warmup(backend, audio_path, model_name, args, backend_session)
-            for run_index in range(1, args.runs + 1):
-                result = run_single_backend(
-                    backend,
-                    audio_path,
-                    model_name,
-                    run_index,
-                    args,
-                    backend_session,
-                    backend_session.load_seconds if run_index == 1 else None,
+                    print(
+                        f"Skipping {backend} on sample {audio_input.sample_label} model {model_name} (not supported).",
+                        file=sys.stderr,
+                    )
+                    continue
+                print(
+                    f"Benchmarking {backend} on sample {audio_input.sample_label} model {model_name}...",
+                    file=sys.stderr,
                 )
-                results.append(result)
-                if result.status == "ok":
-                    print(
-                        f"  run {run_index}: total={format_float(result.total_seconds)}s",
-                        file=sys.stderr,
+                try:
+                    backend_session = load_backend_session(
+                        backend, model_name, per_audio_args
                     )
-                else:
-                    print(
-                        f"  run {run_index}: error={result.error}",
-                        file=sys.stderr,
-                    )
+                except Exception as exc:  # pragma: no cover - benchmark scripts should continue after failures.
+                    error = "".join(
+                        traceback.format_exception_only(type(exc), exc)
+                    ).strip()
+                    print(f"  load error: {error}", file=sys.stderr)
+                    for run_index in range(1, args.runs + 1):
+                        results.append(
+                            build_error_result(
+                                backend=backend,
+                                model_name=model_name,
+                                backend_device=None,
+                                run_index=run_index,
+                                error=error,
+                                audio_path=audio_input.audio_path,
+                                sample_label=audio_input.sample_label,
+                                audio_duration_seconds=audio_input.audio_duration_seconds,
+                                forced_language=audio_input.forced_language,
+                            )
+                        )
+                    continue
 
-    aggregated = aggregate_results(results, audio_duration_seconds)
+                maybe_warmup(
+                    backend,
+                    audio_input.audio_path,
+                    model_name,
+                    per_audio_args,
+                    backend_session,
+                )
+                for run_index in range(1, args.runs + 1):
+                    result = run_single_backend(
+                        backend,
+                        audio_input.audio_path,
+                        model_name,
+                        run_index,
+                        per_audio_args,
+                        backend_session,
+                        backend_session.load_seconds if run_index == 1 else None,
+                    )
+                    results.append(result)
+                    if result.status == "ok":
+                        print(
+                            f"  run {run_index}: total={format_float(result.total_seconds)}s",
+                            file=sys.stderr,
+                        )
+                    else:
+                        print(
+                            f"  run {run_index}: error={result.error}",
+                            file=sys.stderr,
+                        )
+
+    aggregated = aggregate_results(results)
     payload = {
-        "metadata": build_metadata(args, audio_path, audio_duration_seconds),
+        "metadata": build_metadata(args, audio_inputs),
         "skipped": [asdict(item) for item in skipped],
         "summary": aggregated,
         "runs": [asdict(result) for result in results],

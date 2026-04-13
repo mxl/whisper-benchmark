@@ -14,15 +14,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--audio",
-        type=Path,
-        default=Path("samples/librispeech_1089_134686.mp3"),
-        help="Audio file to benchmark. Defaults to the prepared English sample.",
-    )
-    parser.add_argument(
-        "--reference-transcript",
-        type=Path,
-        default=Path("samples/librispeech_1089_134686.txt"),
-        help="Reference transcript used for WER/CER. Defaults to the prepared English sample transcript.",
+        default="en",
+        help=(
+            "Audio selector passed through to benchmark_whisper.py. Defaults to the "
+            "bundled English sample."
+        ),
     )
     parser.add_argument(
         "--backend",
@@ -43,11 +39,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Model to benchmark. Defaults to tiny for a fast sanity check.",
     )
     parser.add_argument(
-        "--language",
-        default="en",
-        help="Language passed to benchmark_whisper.py. Defaults to en.",
-    )
-    parser.add_argument(
         "--output",
         type=Path,
         default=Path("output/smoke_test_results.json"),
@@ -60,17 +51,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     command = [
-        str(args.audio),
+        "--audio",
+        args.audio,
         "--backends",
         args.backend,
         "--models",
         args.model,
         "--runs",
         "1",
-        "--language",
-        args.language,
-        "--reference-transcript",
-        str(args.reference_transcript),
         "--output",
         str(args.output),
     ]
