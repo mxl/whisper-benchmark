@@ -514,6 +514,9 @@ def resolve_insanely_fast_whisper_device(
             pass
         return "cpu", False, "cpu"
 
+    if requested_device_id == "cpu":
+        return "cpu", False, "cpu"
+
     return f"cuda:{requested_device_id}", False, requested_device_id
 
 
@@ -733,7 +736,6 @@ def run_insanely_fast_whisper(
         ignore_warning=True,
         batch_size=args.insanely_fast_whisper_batch_size,
         generate_kwargs=session["generate_kwargs"],
-        return_timestamps=True,
         return_language=True,
     )
     transcribe_seconds = time.perf_counter() - transcribe_started

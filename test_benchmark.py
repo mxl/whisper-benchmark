@@ -158,6 +158,17 @@ class OutputHelperTests(unittest.TestCase):
         self.assertIn("platform", metadata)
         self.assertIn("python_version", metadata)
 
+
+class DeviceResolutionTests(unittest.TestCase):
+    def test_resolve_insanely_fast_whisper_device_cpu(self) -> None:
+        device, should_clear_mps_cache, resolved_device_id = (
+            benchmark_whisper.resolve_insanely_fast_whisper_device("cpu")
+        )
+
+        self.assertEqual(device, "cpu")
+        self.assertFalse(should_clear_mps_cache)
+        self.assertEqual(resolved_device_id, "cpu")
+
     def test_aggregate_results_uses_load_seconds_key(self) -> None:
         result = benchmark_whisper.RunResult(
             audio="samples/en.mp3",
@@ -679,6 +690,48 @@ class BackendInvocationTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         _, kwargs = transcribe_audio.call_args
         self.assertNotIn("beam_size", kwargs)
+
+    def test_insanely_fast_whisper_does_not_request_timestamps(self) -> None:
+        args = argparse.Namespace(
+            language="en",
+            task="transcribe",
+            condition_on_previous_text=True,
+            insanely_fast_whisper_batch_size=1,
+            reference_transcript_text=None,
+            sample_label="audio",
+            audio_duration_seconds=10.0,
+        )
+        pipe_calls: list[dict[str, object]] = []
+
+        def fake_pipe(audio, **kwargs):
+            pipe_calls.append({"audio": audio, **kwargs})
+            return {"text": "hello", "language": "en", "chunks": []}
+
+        with mock.patch(
+            "insanely_fast_whisper.utils.result.build_result",
+            return_value={"text": "hello"},
+        ):
+            result = benchmark_whisper.run_insanely_fast_whisper(
+                audio_path=Path("audio.mp3"),
+                model_name="tiny",
+                run_index=1,
+                args=args,
+                session={
+                    "pipe": fake_pipe,
+                    "generate_kwargs": {
+                        "task": "transcribe",
+                        "language": "en",
+                        "condition_on_prev_tokens": True,
+                    },
+                },
+                load_seconds=0.5,
+            )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(len(pipe_calls), 1)
+        self.assertEqual(pipe_calls[0]["audio"], "audio.mp3")
+        self.assertNotIn("return_timestamps", pipe_calls[0])
+        self.assertEqual(pipe_calls[0]["return_language"], True)
 
 
 class DownloadModelsCliTests(unittest.TestCase):
