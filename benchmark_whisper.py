@@ -481,6 +481,7 @@ def run_mlx_whisper(
     result = mlx_whisper.transcribe(
         str(audio_path),
         path_or_hf_repo=session["model_repo"],
+        beam_size=args.beam_size,
         language=args.language,
         task=args.task,
         condition_on_previous_text=args.condition_on_previous_text,
@@ -597,6 +598,7 @@ def run_lightning_whisper_mlx(
     result = transcribe_audio(
         str(audio_path),
         path_or_hf_repo=session["model_path"],
+        beam_size=args.beam_size,
         language=args.language,
         task=args.task,
         condition_on_previous_text=args.condition_on_previous_text,
@@ -751,7 +753,11 @@ def load_backend_session(
             resolve_insanely_fast_whisper_device(args.insanely_fast_whisper_device_id)
         )
         attn = "flash_attention_2" if args.insanely_fast_whisper_flash else "sdpa"
-        generate_kwargs = {"task": args.task, "language": args.language or None}
+        generate_kwargs = {
+            "task": args.task,
+            "language": args.language or None,
+            "condition_on_prev_tokens": args.condition_on_previous_text,
+        }
         if model_repo.endswith(".en"):
             generate_kwargs.pop("task")
 
