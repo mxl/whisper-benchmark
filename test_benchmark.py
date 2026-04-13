@@ -1,6 +1,7 @@
 import argparse
 import contextlib
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -126,6 +127,18 @@ class OutputHelperTests(unittest.TestCase):
         self.assertIn("platform", metadata)
         self.assertIn("python_version", metadata)
 
+    def test_write_json_writes_pretty_json_with_trailing_newline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "result.json"
+            payload = {"hello": "world", "count": 2}
+
+            benchmark_whisper.write_json(output_path, payload)
+
+            content = output_path.read_text(encoding="utf-8")
+            self.assertTrue(content.endswith("\n"))
+            self.assertEqual(json.loads(content), payload)
+            self.assertIn('\n  "hello": "world",\n', content)
+
 
 class BenchmarkCliTests(unittest.TestCase):
     def test_boolean_optional_flags_parse(self) -> None:
@@ -211,6 +224,10 @@ class BenchmarkCliTests(unittest.TestCase):
             exit_code = benchmark_whisper.main()
 
         self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            list(written_payload.keys()),
+            ["metadata", "skipped", "summary", "runs"],
+        )
         self.assertIn(
             "Skipping lightning-whisper-mlx on model large-v3-turbo (not supported).",
             stderr.getvalue(),
