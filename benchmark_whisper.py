@@ -597,7 +597,6 @@ def run_lightning_whisper_mlx(
     result = transcribe_audio(
         str(audio_path),
         path_or_hf_repo=session["model_path"],
-        beam_size=args.beam_size,
         language=args.language,
         task=args.task,
         condition_on_previous_text=args.condition_on_previous_text,
