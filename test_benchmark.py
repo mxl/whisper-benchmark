@@ -759,7 +759,7 @@ class UnifiedCliTests(unittest.TestCase):
         workspace_root = str(stt_cli.WORKSPACE_ROOT)
         fake_sys_path = [
             "/tmp/venv/bin",
-            "/tmp/venv/lib/python3.11/site-packages",
+            "/tmp/venv/lib/pythonX.Y/site-packages",
             workspace_root,
             "/tmp/other",
         ]
