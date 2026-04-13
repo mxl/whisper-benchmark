@@ -135,7 +135,7 @@ BACKEND_CAPABILITIES: dict[str, BackendCapabilities] = {
 }
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Benchmark multiple Whisper backends across multiple model sizes."
     )
@@ -270,7 +270,7 @@ def parse_args() -> argparse.Namespace:
         default=12,
         help="Batch size passed to lightning-whisper-mlx.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def ensure_audio_file(audio_path: Path) -> Path:
@@ -1145,8 +1145,8 @@ def build_metadata(
     }
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     args.output = resolve_output_paths(args.output)
     audio_path = ensure_audio_file(args.audio)
     audio_duration_seconds = get_audio_duration_seconds(audio_path)

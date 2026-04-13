@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
-import sys
 from pathlib import Path
 
+import benchmark_whisper
 
-def parse_args() -> argparse.Namespace:
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a quick benchmark smoke test against a prepared sample."
     )
@@ -53,15 +53,13 @@ def parse_args() -> argparse.Namespace:
         default=Path("output/smoke_test_results.json"),
         help="Where to write the JSON benchmark output.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
 
     command = [
-        str(Path(".venv/bin/python3")),
-        "benchmark_whisper.py",
         str(args.audio),
         "--backends",
         args.backend,
@@ -77,10 +75,10 @@ def main() -> int:
         str(args.output),
     ]
 
-    completed = subprocess.run(command)
-    if completed.returncode == 0:
+    exit_code = benchmark_whisper.main(command)
+    if exit_code == 0:
         print(f"\nSmoke test passed. Results written to {args.output}")
-    return completed.returncode
+    return exit_code
 
 
 if __name__ == "__main__":

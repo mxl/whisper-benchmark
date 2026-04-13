@@ -1,6 +1,6 @@
-# Whisper Backend Benchmark
+# STT Benchmark
 
-This repo benchmarks `faster-whisper`, `mlx-whisper`, `mlx-audio`, `lightning-whisper-mlx`, `insanely-fast-whisper`, and `openai-whisper` on the same audio file across multiple Whisper model sizes.
+This repo benchmarks speech-to-text engines on the same audio files. Today it includes `faster-whisper`, `mlx-whisper`, `mlx-audio`, `lightning-whisper-mlx`, `insanely-fast-whisper`, and `openai-whisper`.
 
 ## What it measures
 
@@ -22,6 +22,23 @@ Create a Python virtual environment and install dependencies with `uv`:
 /opt/homebrew/bin/uv sync
 ```
 
+Primary CLI:
+
+```bash
+uv run stt-benchmark --help
+```
+
+Available commands:
+
+```bash
+uv run stt-benchmark benchmark --help
+uv run stt-benchmark download-models --help
+uv run stt-benchmark prepare-samples --help
+uv run stt-benchmark smoke-test --help
+```
+
+The existing script entry points still work and are kept for compatibility.
+
 `mlx-whisper` requires Apple Silicon and MLX. On macOS you will also usually want `ffmpeg` installed:
 
 ```bash
@@ -41,13 +58,13 @@ By default, MLX model repos are resolved as `mlx-community/whisper-<model>-mlx`,
 Basic run across `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3
+uv run stt-benchmark benchmark /path/to/audio.mp3
 ```
 
 Run two repetitions and add warmup:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
+uv run stt-benchmark benchmark /path/to/audio.mp3 \
   --runs 2 \
   --warmup \
   --output results.json
@@ -56,62 +73,62 @@ Run two repetitions and add warmup:
 Print the full per-run table before the summary table:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --show-full-table
+uv run stt-benchmark benchmark /path/to/audio.mp3 --show-full-table
 ```
 
 Only benchmark selected models:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --models tiny base small
+uv run stt-benchmark benchmark /path/to/audio.mp3 --models tiny base small
 ```
 
 Only benchmark one backend:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --backends faster-whisper
+uv run stt-benchmark benchmark /path/to/audio.mp3 --backends faster-whisper
 ```
 
 Benchmark only insanely-fast-whisper:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --backends insanely-fast-whisper
+uv run stt-benchmark benchmark /path/to/audio.mp3 --backends insanely-fast-whisper
 ```
 
 Benchmark only openai-whisper:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --backends openai-whisper
+uv run stt-benchmark benchmark /path/to/audio.mp3 --backends openai-whisper
 ```
 
 Benchmark only mlx-audio:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --backends mlx-audio
+uv run stt-benchmark benchmark /path/to/audio.mp3 --backends mlx-audio
 ```
 
 Benchmark only lightning-whisper-mlx:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --backends lightning-whisper-mlx
+uv run stt-benchmark benchmark /path/to/audio.mp3 --backends lightning-whisper-mlx
 ```
 
 Force English transcription:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --language en
+uv run stt-benchmark benchmark /path/to/audio.mp3 --language en
 ```
 
 Score against a ground-truth transcript:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
+uv run stt-benchmark benchmark /path/to/audio.mp3 \
   --reference-transcript /path/to/reference.txt
 ```
 
 Reduce end-of-audio hallucination loops on supported backends:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
+uv run stt-benchmark benchmark /path/to/audio.mp3 \
   --hallucination-silence-threshold 2.0
 ```
 
@@ -120,13 +137,13 @@ Set `--hallucination-silence-threshold 0` to disable it.
 Use a different `faster-whisper` compute type:
 
 ```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --compute-type int8 --device cpu
+uv run stt-benchmark benchmark /path/to/audio.mp3 --compute-type int8 --device cpu
 ```
 
 Download only selected model weights:
 
 ```bash
-.venv/bin/python download_models.py --mlx-whisper --models tiny large-v3
+uv run stt-benchmark download-models --mlx-whisper --models tiny large-v3
 ```
 
 ## Smoke Test
@@ -134,7 +151,7 @@ Download only selected model weights:
 Run a quick end-to-end sanity check against the prepared English sample:
 
 ```bash
-.venv/bin/python3 smoke_test.py
+uv run stt-benchmark smoke-test
 ```
 
 This defaults to `mlx-whisper` with the `tiny` model and writes JSON output to `output/smoke_test_results.json`.

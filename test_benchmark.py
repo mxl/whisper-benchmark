@@ -9,6 +9,9 @@ from unittest import mock
 
 import benchmark_whisper
 import download_models
+import prepare_samples
+import smoke_test
+from stt_benchmark import cli as stt_cli
 
 
 class NormalizeTranscriptTests(unittest.TestCase):
@@ -239,6 +242,19 @@ class BenchmarkCliTests(unittest.TestCase):
             ],
         ):
             args = benchmark_whisper.parse_args()
+        self.assertFalse(args.faster_whisper_vad_filter)
+        self.assertFalse(args.condition_on_previous_text)
+        self.assertFalse(args.openai_whisper_temperature_fallback)
+
+    def test_benchmark_parse_args_accepts_explicit_argv(self) -> None:
+        args = benchmark_whisper.parse_args(
+            [
+                "audio.mp3",
+                "--no-faster-whisper-vad-filter",
+                "--no-condition-on-previous-text",
+                "--no-openai-whisper-temperature-fallback",
+            ]
+        )
         self.assertFalse(args.faster_whisper_vad_filter)
         self.assertFalse(args.condition_on_previous_text)
         self.assertFalse(args.openai_whisper_temperature_fallback)
@@ -535,6 +551,105 @@ class DownloadModelsCliTests(unittest.TestCase):
             args = download_models.parse_args()
         self.assertEqual(args.models, ["tiny", "large-v3"])
         self.assertTrue(args.mlx_whisper)
+
+    def test_download_models_parse_args_accepts_explicit_argv(self) -> None:
+        args = download_models.parse_args(["--mlx-whisper", "--models", "tiny"])
+        self.assertEqual(args.models, ["tiny"])
+        self.assertTrue(args.mlx_whisper)
+
+
+class PrepareSamplesCliTests(unittest.TestCase):
+    def test_prepare_samples_parse_args_accepts_explicit_argv(self) -> None:
+        args = prepare_samples.parse_args(["--lang", "ru", "--target-duration", "300"])
+        self.assertEqual(args.lang, "ru")
+        self.assertEqual(args.target_duration, 300)
+
+
+class SmokeTestCliTests(unittest.TestCase):
+    def test_smoke_test_parse_args_accepts_explicit_argv(self) -> None:
+        args = smoke_test.parse_args(
+            ["--backend", "openai-whisper", "--model", "small"]
+        )
+        self.assertEqual(args.backend, "openai-whisper")
+        self.assertEqual(args.model, "small")
+
+    def test_smoke_test_delegates_to_benchmark_main(self) -> None:
+        with mock.patch.object(
+            benchmark_whisper, "main", return_value=0
+        ) as benchmark_main:
+            exit_code = smoke_test.main(
+                [
+                    "--audio",
+                    "sample.mp3",
+                    "--reference-transcript",
+                    "sample.txt",
+                    "--backend",
+                    "mlx-whisper",
+                    "--model",
+                    "tiny",
+                    "--language",
+                    "en",
+                    "--output",
+                    "out.json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        benchmark_main.assert_called_once_with(
+            [
+                "sample.mp3",
+                "--backends",
+                "mlx-whisper",
+                "--models",
+                "tiny",
+                "--runs",
+                "1",
+                "--language",
+                "en",
+                "--reference-transcript",
+                "sample.txt",
+                "--output",
+                "out.json",
+            ]
+        )
+
+
+class UnifiedCliTests(unittest.TestCase):
+    def test_main_without_command_returns_error(self) -> None:
+        self.assertEqual(stt_cli.main([]), 2)
+
+    def test_resolve_command_main_returns_current_callable(self) -> None:
+        self.assertIs(stt_cli.resolve_command_main("benchmark"), benchmark_whisper.main)
+
+    def test_cli_dispatches_benchmark_subcommand(self) -> None:
+        with mock.patch.object(
+            benchmark_whisper, "main", return_value=0
+        ) as command_main:
+            exit_code = stt_cli.main(["benchmark", "audio.mp3", "--runs", "2"])
+
+        self.assertEqual(exit_code, 0)
+        command_main.assert_called_once_with(["audio.mp3", "--runs", "2"])
+
+    def test_cli_dispatches_download_models_subcommand(self) -> None:
+        with mock.patch.object(download_models, "main", return_value=0) as command_main:
+            exit_code = stt_cli.main(["download-models", "--mlx-whisper"])
+
+        self.assertEqual(exit_code, 0)
+        command_main.assert_called_once_with(["--mlx-whisper"])
+
+    def test_cli_dispatches_prepare_samples_subcommand(self) -> None:
+        with mock.patch.object(prepare_samples, "main", return_value=0) as command_main:
+            exit_code = stt_cli.main(["prepare-samples", "--lang", "en"])
+
+        self.assertEqual(exit_code, 0)
+        command_main.assert_called_once_with(["--lang", "en"])
+
+    def test_cli_dispatches_smoke_test_subcommand(self) -> None:
+        with mock.patch.object(smoke_test, "main", return_value=0) as command_main:
+            exit_code = stt_cli.main(["smoke-test", "--backend", "mlx-whisper"])
+
+        self.assertEqual(exit_code, 0)
+        command_main.assert_called_once_with(["--backend", "mlx-whisper"])
 
 
 class ParityTests(unittest.TestCase):

@@ -446,7 +446,7 @@ def prepare_russian(
 # ---------------------------------------------------------------------------
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download and prepare LibriSpeech (EN) and RuLS (RU) benchmark clips."
     )
@@ -474,11 +474,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep downloaded .tar.gz archives after extraction.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.lang in ("en", "both"):

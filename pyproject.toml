@@ -1,7 +1,11 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
 [project]
-name = "whisper-benchmark"
+name = "stt-benchmark"
 version = "0.1.0"
-description = "Benchmark multiple Whisper backends on the same audio samples"
+description = "Benchmark speech-to-text engines on the same audio samples"
 requires-python = ">=3.11"
 dependencies = [
     "faster-whisper>=1.1.0",
@@ -13,5 +17,17 @@ dependencies = [
     "jiwer>=3.0.5",
 ]
 
+[project.scripts]
+stt-benchmark = "stt_benchmark.cli:main"
+
 [tool.uv]
-package = false
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["stt_benchmark"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"benchmark_whisper.py" = "benchmark_whisper.py"
+"download_models.py" = "download_models.py"
+"prepare_samples.py" = "prepare_samples.py"
+"smoke_test.py" = "smoke_test.py"

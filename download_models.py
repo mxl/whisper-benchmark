@@ -35,7 +35,7 @@ OPENAI_WHISPER_MODELS = {
 }
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download benchmark model files for each supported engine."
     )
@@ -82,7 +82,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MODELS,
         help="Model names to download. Defaults to tiny base small medium large-v3 large-v3-turbo.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def download_faster_whisper(model_name: str) -> None:
@@ -171,8 +171,8 @@ def resolve_engines(args: argparse.Namespace) -> set[str]:
     return engines
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     engines = resolve_engines(args)
     failures: list[tuple[str, str]] = []
 
