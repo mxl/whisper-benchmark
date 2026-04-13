@@ -275,6 +275,33 @@ class BenchmarkCliTests(unittest.TestCase):
 
 
 class BackendInvocationTests(unittest.TestCase):
+    def test_mlx_whisper_does_not_pass_beam_size(self) -> None:
+        args = argparse.Namespace(
+            language="en",
+            task="transcribe",
+            beam_size=5,
+            condition_on_previous_text=True,
+            hallucination_silence_threshold=2.0,
+            reference_transcript_text=None,
+        )
+
+        with mock.patch(
+            "mlx_whisper.transcribe",
+            return_value={"text": "hello", "language": "en"},
+        ) as transcribe:
+            result = benchmark_whisper.run_mlx_whisper(
+                audio_path=Path("audio.mp3"),
+                model_name="tiny",
+                run_index=1,
+                args=args,
+                session={"model_repo": "mlx-community/whisper-tiny-mlx"},
+                load_seconds=0.5,
+            )
+
+        self.assertEqual(result.status, "ok")
+        _, kwargs = transcribe.call_args
+        self.assertNotIn("beam_size", kwargs)
+
     def test_lightning_whisper_mlx_does_not_pass_beam_size(self) -> None:
         args = argparse.Namespace(
             language="en",
