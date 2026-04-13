@@ -367,6 +367,34 @@ def build_run_result(
     )
 
 
+def build_error_result(
+    *,
+    backend: str,
+    model_name: str,
+    backend_device: str | None,
+    run_index: int,
+    error: str,
+) -> RunResult:
+    return RunResult(
+        backend=backend,
+        model=model_name,
+        backend_device=backend_device,
+        run_index=run_index,
+        load_seconds=None,
+        transcribe_seconds=None,
+        total_seconds=None,
+        transcript=None,
+        transcript_chars=None,
+        transcript_words=None,
+        wer=None,
+        cer=None,
+        detected_language=None,
+        detected_language_probability=None,
+        status="error",
+        error=error,
+    )
+
+
 def run_faster_whisper(
     audio_path: Path,
     model_name: str,
@@ -774,22 +802,11 @@ def run_single_backend(
     except (
         Exception
     ) as exc:  # pragma: no cover - benchmark scripts should continue after failures.
-        return RunResult(
+        return build_error_result(
             backend=backend,
-            model=model_name,
+            model_name=model_name,
             backend_device=backend_session.device,
             run_index=run_index,
-            load_seconds=None,
-            transcribe_seconds=None,
-            total_seconds=None,
-            transcript=None,
-            transcript_chars=None,
-            transcript_words=None,
-            wer=None,
-            cer=None,
-            detected_language=None,
-            detected_language_probability=None,
-            status="error",
             error="".join(traceback.format_exception_only(type(exc), exc)).strip(),
         )
 
@@ -1048,22 +1065,11 @@ def main() -> int:
                 print(f"  load error: {error}", file=sys.stderr)
                 for run_index in range(1, args.runs + 1):
                     results.append(
-                        RunResult(
+                        build_error_result(
                             backend=backend,
-                            model=model_name,
+                            model_name=model_name,
                             backend_device=None,
                             run_index=run_index,
-                            load_seconds=None,
-                            transcribe_seconds=None,
-                            total_seconds=None,
-                            transcript=None,
-                            transcript_chars=None,
-                            transcript_words=None,
-                            wer=None,
-                            cer=None,
-                            detected_language=None,
-                            detected_language_probability=None,
-                            status="error",
                             error=error,
                         )
                     )
