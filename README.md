@@ -146,9 +146,9 @@ Run the unit test suite with:
 The script prints a summary table like:
 
 ```text
-backend         model      ok    avg_total_s   median_total_s   avg_load_s   avg_transcribe_s
-faster-whisper  tiny       3/3   1.234         1.210            0.456        0.778
-mlx-whisper     tiny       3/3   0.987         0.981            0.123        0.864
+backend         model      ok    avg_total_s   median_total_s   load_s   avg_transcribe_s
+faster-whisper  tiny       3/3   1.234         1.210            0.456    0.778
+mlx-whisper     tiny       3/3   0.987         0.981            0.123    0.864
 ```
 
 When `--reference-transcript` is provided, the summary also includes `avg_wer` and `avg_cer`.
@@ -169,6 +169,7 @@ Unsupported backend/model combinations are skipped and do not appear in the summ
 - Run benchmarks sequentially, not in parallel.
 - Use one backend at a time, one model at a time, and one language file at a time.
 - The benchmark passes the overlapping knobs that are available across backends, including `language`, `task`, and `condition_on_previous_text`, but exact decoding parity is still not possible across all implementations.
+- `--beam-size` is currently passed to `faster-whisper`, `mlx-audio`, and `openai-whisper`. It is intentionally not passed to `mlx-whisper` or `lightning-whisper-mlx` because both backends expose the option but still raise `NotImplementedError` for beam search at runtime.
 - `--hallucination-silence-threshold` is supported by `faster-whisper`, `mlx-whisper`, `lightning-whisper-mlx`, and `openai-whisper`. It is not supported by `mlx-audio` or `insanely-fast-whisper`.
 - `mlx-audio` only supports the overlapping Whisper-style model repos configured in this benchmark: `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`.
 - `lightning-whisper-mlx` supports `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-turbo`. In this benchmark `large-v3-turbo` is loaded from `mlx-community/whisper-turbo` because the standard MLX turbo repo format used by other backends is not directly compatible with `lightning-whisper-mlx`.
