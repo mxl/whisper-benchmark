@@ -86,6 +86,13 @@ class BackendSession:
     load_seconds: float | None
 
 
+@dataclass
+class SkippedBenchmark:
+    backend: str
+    model: str
+    reason: str
+
+
 @dataclass(frozen=True)
 class BackendCapabilities:
     supported_models: set[str] | None
@@ -1085,10 +1092,18 @@ def main() -> int:
     )
 
     results: list[RunResult] = []
+    skipped: list[SkippedBenchmark] = []
     for model_name in args.models:
         for backend in args.backends:
             supported = BACKEND_CAPABILITIES[backend].supported_models
             if supported is not None and model_name not in supported:
+                skipped.append(
+                    SkippedBenchmark(
+                        backend=backend,
+                        model=model_name,
+                        reason="not supported",
+                    )
+                )
                 print(
                     f"Skipping {backend} on model {model_name} (not supported).",
                     file=sys.stderr,
@@ -1138,6 +1153,7 @@ def main() -> int:
     aggregated = aggregate_results(results, audio_duration_seconds)
     payload = {
         "metadata": build_metadata(args, audio_path, audio_duration_seconds),
+        "skipped": [asdict(item) for item in skipped],
         "summary": aggregated,
         "runs": [asdict(result) for result in results],
     }

@@ -82,6 +82,7 @@ class BenchmarkCliTests(unittest.TestCase):
 
     def test_main_skips_unsupported_backend_model_combo(self) -> None:
         output_path = Path("/tmp/test-output.json")
+        written_payload: dict[str, object] = {}
         fake_args = argparse.Namespace(
             audio=Path("audio.mp3"),
             models=["large-v3-turbo"],
@@ -135,7 +136,11 @@ class BenchmarkCliTests(unittest.TestCase):
                     )
                 },
             ),
-            mock.patch.object(benchmark_whisper, "write_json"),
+            mock.patch.object(
+                benchmark_whisper,
+                "write_json",
+                side_effect=lambda _path, payload: written_payload.update(payload),
+            ),
             mock.patch.object(benchmark_whisper, "print_summary"),
             contextlib.redirect_stderr(stderr),
         ):
@@ -146,6 +151,18 @@ class BenchmarkCliTests(unittest.TestCase):
             "Skipping lightning-whisper-mlx on model large-v3-turbo (not supported).",
             stderr.getvalue(),
         )
+        self.assertEqual(
+            written_payload["skipped"],
+            [
+                {
+                    "backend": "lightning-whisper-mlx",
+                    "model": "large-v3-turbo",
+                    "reason": "not supported",
+                }
+            ],
+        )
+        self.assertEqual(written_payload["summary"], [])
+        self.assertEqual(written_payload["runs"], [])
 
 
 class DownloadModelsCliTests(unittest.TestCase):
