@@ -39,13 +39,13 @@ MLX_AUDIO_WHISPER_REPOS = {
     "large-v3": "mlx-community/whisper-large-v3-asr-fp16",
     "large-v3-turbo": "mlx-community/whisper-large-v3-turbo-asr-fp16",
 }
-LIGHTNING_WHISPER_MLX_MODELS = {
-    "tiny": "tiny",
-    "base": "base",
-    "small": "small",
-    "medium": "medium",
-    "large-v3": "large-v3",
-    "large-v3-turbo": "large-v3-turbo",
+LIGHTNING_WHISPER_MLX_REPOS = {
+    "tiny": "mlx-community/whisper-tiny",
+    "base": "mlx-community/whisper-base-mlx",
+    "small": "mlx-community/whisper-small-mlx",
+    "medium": "mlx-community/whisper-medium-mlx",
+    "large-v3": "mlx-community/whisper-large-v3-mlx",
+    "large-v3-turbo": "mlx-community/whisper-turbo",
 }
 INSANELY_FAST_WHISPER_REPOS = {
     "tiny": "openai/whisper-tiny",
@@ -59,7 +59,7 @@ BACKEND_SUPPORTED_MODELS: dict[str, set[str] | None] = {
     "faster-whisper": None,
     "mlx-whisper": None,
     "mlx-audio": set(MLX_AUDIO_WHISPER_REPOS),
-    "lightning-whisper-mlx": set(LIGHTNING_WHISPER_MLX_MODELS),
+    "lightning-whisper-mlx": set(LIGHTNING_WHISPER_MLX_REPOS),
     "insanely-fast-whisper": set(INSANELY_FAST_WHISPER_REPOS),
     "openai-whisper": set(OPENAI_WHISPER_REPOS),
 }
@@ -257,12 +257,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=12,
         help="Batch size passed to lightning-whisper-mlx.",
-    )
-    parser.add_argument(
-        "--lightning-whisper-mlx-quant",
-        choices=["none", "4bit", "8bit"],
-        default="none",
-        help="Quantization mode passed to lightning-whisper-mlx.",
     )
     return parser.parse_args()
 
@@ -578,42 +572,6 @@ def run_lightning_whisper_mlx(
     )
 
 
-def lightning_model_repo(model_name: str, quant: str | None) -> str:
-    base = {
-        "tiny": "mlx-community/whisper-tiny",
-        "base": "mlx-community/whisper-base-mlx",
-        "small": "mlx-community/whisper-small-mlx",
-        "medium": "mlx-community/whisper-medium-mlx",
-        "large-v3": "mlx-community/whisper-large-v3-mlx",
-        "large-v3-turbo": "mlx-community/whisper-turbo",
-    }
-    quantized = {
-        "tiny": {
-            "4bit": "mlx-community/whisper-tiny-mlx-4bit",
-            "8bit": "mlx-community/whisper-tiny-mlx-8bit",
-        },
-        "base": {
-            "4bit": "mlx-community/whisper-base-mlx-4bit",
-            "8bit": "mlx-community/whisper-base-mlx-8bit",
-        },
-        "small": {
-            "4bit": "mlx-community/whisper-small-mlx-4bit",
-            "8bit": "mlx-community/whisper-small-mlx-8bit",
-        },
-        "medium": {
-            "4bit": "mlx-community/whisper-medium-mlx-4bit",
-            "8bit": "mlx-community/whisper-medium-mlx-8bit",
-        },
-        "large-v3": {
-            "4bit": "mlx-community/whisper-large-v3-mlx-4bit",
-            "8bit": "mlx-community/whisper-large-v3-mlx-8bit",
-        },
-    }
-    if quant is None:
-        return base[model_name]
-    return quantized[model_name][quant]
-
-
 def run_openai_whisper(
     audio_path: Path,
     model_name: str,
@@ -717,17 +675,11 @@ def load_backend_session(
         import mlx.core as mx
         from lightning_whisper_mlx.transcribe import ModelHolder
 
-        lightning_model_name = LIGHTNING_WHISPER_MLX_MODELS.get(model_name)
-        if lightning_model_name is None:
+        if model_name not in LIGHTNING_WHISPER_MLX_REPOS:
             raise ValueError(f"Unsupported lightning-whisper-mlx model: {model_name}")
-        quant = (
-            None
-            if args.lightning_whisper_mlx_quant == "none"
-            else args.lightning_whisper_mlx_quant
-        )
         load_started = time.perf_counter()
         model_path = snapshot_download(
-            repo_id=lightning_model_repo(lightning_model_name, quant),
+            repo_id=LIGHTNING_WHISPER_MLX_REPOS[model_name],
             allow_patterns=["config.json", "weights.npz"],
         )
         ModelHolder.get_model(model_path, dtype=mx.float16)
@@ -1076,7 +1028,6 @@ def build_metadata(
         "mlx_prefix": args.mlx_prefix,
         "mlx_suffix": args.mlx_suffix,
         "lightning_whisper_mlx_batch_size": args.lightning_whisper_mlx_batch_size,
-        "lightning_whisper_mlx_quant": args.lightning_whisper_mlx_quant,
         "insanely_fast_whisper_device_id": args.insanely_fast_whisper_device_id,
         "insanely_fast_whisper_batch_size": args.insanely_fast_whisper_batch_size,
         "insanely_fast_whisper_flash": args.insanely_fast_whisper_flash,

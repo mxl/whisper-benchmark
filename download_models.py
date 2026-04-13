@@ -10,9 +10,8 @@ from huggingface_hub import snapshot_download
 from benchmark_whisper import (
     DEFAULT_MODELS,
     INSANELY_FAST_WHISPER_REPOS,
-    LIGHTNING_WHISPER_MLX_MODELS,
+    LIGHTNING_WHISPER_MLX_REPOS,
     MLX_AUDIO_WHISPER_REPOS,
-    lightning_model_repo,
 )
 
 
@@ -121,10 +120,9 @@ def download_mlx_audio_whisper(model_name: str) -> None:
 
 
 def download_lightning_whisper_mlx(model_name: str) -> None:
-    lightning_name = LIGHTNING_WHISPER_MLX_MODELS.get(model_name)
-    if lightning_name is None:
+    if model_name not in LIGHTNING_WHISPER_MLX_REPOS:
         return
-    repo_id = lightning_model_repo(lightning_name, None)
+    repo_id = LIGHTNING_WHISPER_MLX_REPOS[model_name]
     print(f"Downloading lightning-whisper-mlx model: {repo_id}", flush=True)
     snapshot_download(
         repo_id=repo_id,
