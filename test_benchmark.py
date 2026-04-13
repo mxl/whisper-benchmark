@@ -127,6 +127,31 @@ class OutputHelperTests(unittest.TestCase):
         self.assertIn("platform", metadata)
         self.assertIn("python_version", metadata)
 
+    def test_aggregate_results_uses_load_seconds_key(self) -> None:
+        result = benchmark_whisper.RunResult(
+            backend="mlx-whisper",
+            model="tiny",
+            backend_device="mlx",
+            run_index=1,
+            load_seconds=1.25,
+            transcribe_seconds=2.5,
+            total_seconds=3.75,
+            transcript="hello world",
+            transcript_chars=11,
+            transcript_words=2,
+            wer=None,
+            cer=None,
+            detected_language="en",
+            detected_language_probability=None,
+            status="ok",
+            error=None,
+        )
+
+        aggregated = benchmark_whisper.aggregate_results([result], 10.0)
+
+        self.assertEqual(aggregated[0]["load_seconds"], 1.25)
+        self.assertNotIn("avg_load_seconds", aggregated[0])
+
     def test_write_json_writes_pretty_json_with_trailing_newline(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "result.json"

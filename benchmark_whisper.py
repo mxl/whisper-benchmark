@@ -521,6 +521,7 @@ def run_insanely_fast_whisper(
         batch_size=args.insanely_fast_whisper_batch_size,
         generate_kwargs=session["generate_kwargs"],
         return_timestamps=True,
+        return_language=True,
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
 
@@ -533,7 +534,7 @@ def run_insanely_fast_whisper(
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
         transcript=transcript,
-        detected_language=result.get("language"),
+        detected_language=outputs.get("language") or result.get("language"),
         detected_language_probability=None,
         reference_transcript=args.reference_transcript_text,
     )
@@ -632,7 +633,7 @@ def run_openai_whisper(
     temperature = (
         (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
         if args.openai_whisper_temperature_fallback
-        else 0
+        else 0.0
     )
     hal_threshold = hallucination_silence_threshold_for_backend("openai-whisper", args)
     transcribe_started = time.perf_counter()
@@ -650,6 +651,19 @@ def run_openai_whisper(
     )
     transcribe_seconds = time.perf_counter() - transcribe_started
     transcript = (result.get("text") or "").strip()
+    detected_language = result.get("language")
+    detected_language_probability = None
+    if args.language is None and detected_language is not None:
+        try:
+            from whisper.audio import log_mel_spectrogram, pad_or_trim
+
+            mel_segment = pad_or_trim(
+                log_mel_spectrogram(str(audio_path), session.dims.n_mels)
+            ).to(session.device)
+            _, probs = session.detect_language(mel_segment)
+            detected_language_probability = probs.get(detected_language)
+        except Exception:
+            detected_language_probability = None
     return build_run_result(
         backend="openai-whisper",
         model_name=model_name,
@@ -657,8 +671,8 @@ def run_openai_whisper(
         load_seconds=load_seconds,
         transcribe_seconds=transcribe_seconds,
         transcript=transcript,
-        detected_language=result.get("language"),
-        detected_language_probability=None,
+        detected_language=detected_language,
+        detected_language_probability=detected_language_probability,
         reference_transcript=args.reference_transcript_text,
     )
 
@@ -912,7 +926,7 @@ def aggregate_results(
                 "median_total_seconds": median_or_none(total_values),
                 "min_total_seconds": min(total_values) if total_values else None,
                 "max_total_seconds": max(total_values) if total_values else None,
-                "avg_load_seconds": mean_or_none(load_values),
+                "load_seconds": mean_or_none(load_values),
                 "avg_transcribe_seconds": mean_or_none(transcribe_values),
                 "stddev_transcribe_seconds": stdev_or_none(transcribe_values),
                 "avg_rtf": (
@@ -961,7 +975,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
         "ok",
         "avg_total_s",
         "median_total_s",
-        "avg_load_s",
+        "load_s",
         "avg_transcribe_s",
         "stddev_transcribe_s",
         "avg_rtf",
@@ -977,7 +991,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
                 f"{row['successful_runs']}/{row['runs']}",
                 format_float(row["avg_total_seconds"]),
                 format_float(row["median_total_seconds"]),
-                format_float(row["avg_load_seconds"]),
+                format_float(row["load_seconds"]),
                 format_float(row["avg_transcribe_seconds"]),
                 format_float(row["stddev_transcribe_seconds"]),
                 format_float(row["avg_rtf"]),
@@ -1002,7 +1016,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
     print("ok: successful runs over total runs")
     print("avg_total_s: average end-to-end runtime in seconds")
     print("median_total_s: median end-to-end runtime in seconds")
-    print("avg_load_s: average model load time in seconds when measurable")
+    print("load_s: one-time model load time in seconds when measurable")
     print("avg_transcribe_s: average transcription time in seconds")
     print("stddev_transcribe_s: standard deviation of transcription time in seconds")
     print("avg_rtf: average real-time factor (transcribe_s / audio_duration_s)")
