@@ -242,5 +242,53 @@ class DownloadModelsCliTests(unittest.TestCase):
         self.assertTrue(args.mlx_whisper)
 
 
+class ParityTests(unittest.TestCase):
+    def test_default_models_match_downloadable_model_sets(self) -> None:
+        default_models = set(benchmark_whisper.DEFAULT_MODELS)
+        self.assertEqual(default_models, set(download_models.FASTER_WHISPER_REPOS))
+        self.assertEqual(default_models, set(download_models.MLX_WHISPER_REPOS))
+        self.assertEqual(default_models, set(benchmark_whisper.MLX_AUDIO_WHISPER_REPOS))
+        self.assertEqual(
+            default_models, set(benchmark_whisper.INSANELY_FAST_WHISPER_REPOS)
+        )
+        self.assertEqual(default_models, set(download_models.OPENAI_WHISPER_MODELS))
+
+    def test_backend_capabilities_match_repo_maps_for_supported_backends(self) -> None:
+        self.assertEqual(
+            benchmark_whisper.BACKEND_CAPABILITIES["mlx-audio"].supported_models,
+            set(benchmark_whisper.MLX_AUDIO_WHISPER_REPOS),
+        )
+        self.assertEqual(
+            benchmark_whisper.BACKEND_CAPABILITIES[
+                "lightning-whisper-mlx"
+            ].supported_models,
+            set(benchmark_whisper.LIGHTNING_WHISPER_MLX_REPOS),
+        )
+        self.assertEqual(
+            benchmark_whisper.BACKEND_CAPABILITIES[
+                "insanely-fast-whisper"
+            ].supported_models,
+            set(benchmark_whisper.INSANELY_FAST_WHISPER_REPOS),
+        )
+        self.assertEqual(
+            benchmark_whisper.BACKEND_CAPABILITIES["openai-whisper"].supported_models,
+            set(benchmark_whisper.OPENAI_WHISPER_REPOS),
+        )
+
+    def test_downloader_imported_repo_maps_match_benchmark_repo_maps(self) -> None:
+        self.assertEqual(
+            download_models.MLX_AUDIO_WHISPER_REPOS,
+            benchmark_whisper.MLX_AUDIO_WHISPER_REPOS,
+        )
+        self.assertEqual(
+            download_models.INSANELY_FAST_WHISPER_REPOS,
+            benchmark_whisper.INSANELY_FAST_WHISPER_REPOS,
+        )
+        self.assertEqual(
+            download_models.LIGHTNING_WHISPER_MLX_REPOS,
+            benchmark_whisper.LIGHTNING_WHISPER_MLX_REPOS,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
