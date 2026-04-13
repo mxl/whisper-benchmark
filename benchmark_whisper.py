@@ -9,6 +9,7 @@ import re
 import subprocess
 import statistics
 import sys
+import tempfile
 import time
 import traceback
 import unicodedata
@@ -550,14 +551,16 @@ def run_mlx_audio(
     from mlx_audio.stt.generate import generate_transcription
 
     transcribe_started = time.perf_counter()
-    result = generate_transcription(
-        model=session,
-        audio=str(audio_path),
-        language=args.language,
-        task=args.task,
-        beam_size=args.beam_size,
-        condition_on_previous_text=args.condition_on_previous_text,
-    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = generate_transcription(
+            model=session,
+            audio=str(audio_path),
+            output_path=str(Path(tmpdir) / "transcript"),
+            language=args.language,
+            task=args.task,
+            beam_size=args.beam_size,
+            condition_on_previous_text=args.condition_on_previous_text,
+        )
     transcribe_seconds = time.perf_counter() - transcribe_started
     if isinstance(result, dict):
         transcript = (result.get("text") or "").strip()

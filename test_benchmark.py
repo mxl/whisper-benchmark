@@ -275,6 +275,39 @@ class BenchmarkCliTests(unittest.TestCase):
 
 
 class BackendInvocationTests(unittest.TestCase):
+    def test_mlx_audio_redirects_output_path_and_keeps_transcript(self) -> None:
+        args = argparse.Namespace(
+            language="en",
+            task="transcribe",
+            beam_size=5,
+            condition_on_previous_text=True,
+            reference_transcript_text=None,
+        )
+
+        captured_kwargs: dict[str, object] = {}
+
+        def fake_generate_transcription(**kwargs):
+            captured_kwargs.update(kwargs)
+            return {"text": "hello world", "language": "en"}
+
+        with mock.patch(
+            "mlx_audio.stt.generate.generate_transcription",
+            side_effect=fake_generate_transcription,
+        ):
+            result = benchmark_whisper.run_mlx_audio(
+                audio_path=Path("audio.mp3"),
+                model_name="tiny",
+                run_index=1,
+                args=args,
+                session=object(),
+                load_seconds=0.5,
+            )
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.transcript, "hello world")
+        self.assertIn("output_path", captured_kwargs)
+        self.assertTrue(str(captured_kwargs["output_path"]).endswith("/transcript"))
+
     def test_mlx_whisper_does_not_pass_beam_size(self) -> None:
         args = argparse.Namespace(
             language="en",
