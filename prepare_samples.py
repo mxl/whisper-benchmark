@@ -317,15 +317,19 @@ def prepare_russian(
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
 
-        # First pass: find which speaker/chapter has the most files
-        # without extracting everything
+        # First pass: find which speaker/chapter has the most audio files
+        # without extracting everything. The current SLR96 archive layout is:
+        #   <split>/audio/<speaker>/<chapter>/<utterance>.wav
         chapter_counts: dict[str, int] = {}
         with tarfile.open(archive_path, "r:gz") as tar:
             for member in tar:
                 parts = Path(member.name).parts
-                # Expected: ruls_data/<speaker>/<chapter>/<file>
-                if len(parts) == 4 and parts[-1].endswith(".flac"):
-                    key = f"{parts[1]}/{parts[2]}"
+                if (
+                    len(parts) == 5
+                    and parts[1] == "audio"
+                    and parts[-1].endswith((".wav", ".flac"))
+                ):
+                    key = f"{parts[2]}/{parts[3]}"
                     chapter_counts[key] = chapter_counts.get(key, 0) + 1
 
         if not chapter_counts:
@@ -339,50 +343,79 @@ def prepare_russian(
         )
 
         # Second pass: extract only the chosen chapter
-        chapter_prefix = f"ruls_data/{speaker_id}/{chapter_id}/"
+        split_name = None
         with tarfile.open(archive_path, "r:gz") as tar:
-            members = [m for m in tar if m.name.startswith(chapter_prefix)]
+            for member in tar:
+                parts = Path(member.name).parts
+                if len(parts) >= 4 and parts[1:4] == ("audio", speaker_id, chapter_id):
+                    split_name = parts[0]
+                    break
+
+        if split_name is None:
+            raise SystemExit(
+                f"Could not locate selected chapter speaker={speaker_id} chapter={chapter_id} in archive."
+            )
+
+        chapter_prefix = f"{split_name}/audio/{speaker_id}/{chapter_id}/"
+        with tarfile.open(archive_path, "r:gz") as tar:
+            members = [
+                m
+                for m in tar
+                if m.name.startswith(chapter_prefix)
+                or m.name == f"{split_name}/manifest.json"
+            ]
             tar.extractall(path=tmp, members=members)
 
-        chapter_dir = tmp / "ruls_data" / speaker_id / chapter_id
-        flac_files = sorted(chapter_dir.glob("*.flac"))
-        trans_files = list(chapter_dir.glob("*.trans.txt"))
+        chapter_dir = tmp / split_name / "audio" / speaker_id / chapter_id
+        audio_files = sorted(chapter_dir.glob("*.wav")) or sorted(
+            chapter_dir.glob("*.flac")
+        )
+        manifest_path = tmp / split_name / "manifest.json"
 
-        if not flac_files:
-            raise SystemExit(f"No FLAC files extracted to {chapter_dir}")
-        if not trans_files:
-            raise SystemExit(f"No transcript file found in {chapter_dir}")
+        if not audio_files:
+            raise SystemExit(f"No audio files extracted to {chapter_dir}")
+        if not manifest_path.exists():
+            raise SystemExit(f"Manifest file not found: {manifest_path}")
 
         transcripts: dict[str, str] = {}
-        for line in trans_files[0].read_text(encoding="utf-8").splitlines():
+        import json
+
+        for line in manifest_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
-            utt_id, _, text = line.partition(" ")
-            transcripts[utt_id] = text.strip()
+            item = json.loads(line)
+            audio_filepath = item.get("audio_filepath", "")
+            item_path = Path(audio_filepath)
+            if (
+                len(item_path.parts) >= 4
+                and item_path.parts[-3] == speaker_id
+                and item_path.parts[-2] == chapter_id
+            ):
+                transcripts[item_path.stem] = item.get("text", "").strip()
 
         # Select consecutive utterances up to target duration
-        selected_flac: list[Path] = []
+        selected_audio: list[Path] = []
         selected_text: list[str] = []
         total_duration = 0.0
 
-        for flac in flac_files:
-            utt_id = flac.stem
+        for audio_file in audio_files:
+            utt_id = audio_file.stem
             if utt_id not in transcripts:
                 continue
-            dur = audio_duration_s(flac)
+            dur = audio_duration_s(audio_file)
             if total_duration + dur > target_duration + 10:
                 break
-            selected_flac.append(flac)
+            selected_audio.append(audio_file)
             selected_text.append(transcripts[utt_id])
             total_duration += dur
             if total_duration >= target_duration:
                 break
 
-        if not selected_flac:
+        if not selected_audio:
             raise SystemExit("No utterances selected — check target duration.")
 
         log(
-            f"  Selected {len(selected_flac)} utterances, "
+            f"  Selected {len(selected_audio)} utterances, "
             f"total duration ~{total_duration:.1f}s"
         )
 
@@ -392,7 +425,7 @@ def prepare_russian(
         output_attr = output_dir / f"{output_stem}.attribution.txt"
 
         log(f"  Concatenating -> {output_mp3.name} ...")
-        concat_audio_files(selected_flac, output_mp3)
+        concat_audio_files(selected_audio, output_mp3)
 
         transcript = " ".join(selected_text)
         output_txt.write_text(transcript + "\n", encoding="utf-8")
