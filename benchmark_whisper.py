@@ -30,6 +30,14 @@ OPENAI_WHISPER_REPOS = {
     "large-v3": "large-v3",
     "large-v3-turbo": "turbo",
 }
+MLX_WHISPER_REPOS = {
+    "tiny": "mlx-community/whisper-tiny-mlx",
+    "base": "mlx-community/whisper-base-mlx",
+    "small": "mlx-community/whisper-small-mlx",
+    "medium": "mlx-community/whisper-medium-mlx",
+    "large-v3": "mlx-community/whisper-large-v3-mlx",
+    "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
+}
 MLX_AUDIO_WHISPER_REPOS = {
     "tiny": "mlx-community/whisper-tiny-asr-fp16",
     "base": "mlx-community/whisper-base-asr-fp16",
@@ -104,7 +112,7 @@ BACKEND_CAPABILITIES: dict[str, BackendCapabilities] = {
         supports_hallucination_silence_threshold=True,
     ),
     "mlx-whisper": BackendCapabilities(
-        supported_models=None,
+        supported_models=set(MLX_WHISPER_REPOS),
         supports_hallucination_silence_threshold=True,
     ),
     "mlx-audio": BackendCapabilities(
@@ -216,16 +224,6 @@ def parse_args() -> argparse.Namespace:
         "--device",
         default="auto",
         help="faster-whisper device. Example: auto, cpu, cuda.",
-    )
-    parser.add_argument(
-        "--mlx-prefix",
-        default="mlx-community/whisper-",
-        help="Prefix used to map model names to mlx-whisper Hugging Face repos.",
-    )
-    parser.add_argument(
-        "--mlx-suffix",
-        default="-mlx",
-        help="Suffix used to map model names to mlx-whisper Hugging Face repos.",
     )
     parser.add_argument(
         "--output",
@@ -693,8 +691,9 @@ def load_backend_session(
         from mlx_whisper.load_models import load_model as mlx_whisper_load_model
         from mlx_whisper.transcribe import ModelHolder
 
-        mlx_suffix = "" if model_name == "large-v3-turbo" else args.mlx_suffix
-        model_repo = f"{args.mlx_prefix}{model_name}{mlx_suffix}"
+        model_repo = MLX_WHISPER_REPOS.get(model_name)
+        if model_repo is None:
+            raise ValueError(f"Unsupported mlx-whisper model: {model_name}")
         load_started = time.perf_counter()
         ModelHolder.model = mlx_whisper_load_model(model_repo, dtype=mx.float16)
         ModelHolder.model_path = model_repo
@@ -1057,8 +1056,6 @@ def build_metadata(
         "condition_on_previous_text": args.condition_on_previous_text,
         "hallucination_silence_threshold": args.hallucination_silence_threshold,
         "openai_whisper_temperature_fallback": args.openai_whisper_temperature_fallback,
-        "mlx_prefix": args.mlx_prefix,
-        "mlx_suffix": args.mlx_suffix,
         "lightning_whisper_mlx_batch_size": args.lightning_whisper_mlx_batch_size,
         "insanely_fast_whisper_device_id": args.insanely_fast_whisper_device_id,
         "insanely_fast_whisper_batch_size": args.insanely_fast_whisper_batch_size,

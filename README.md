@@ -117,14 +117,6 @@ Use a different `faster-whisper` compute type:
 .venv/bin/python benchmark_whisper.py /path/to/audio.mp3 --compute-type int8 --device cpu
 ```
 
-Override the MLX repo naming pattern if needed:
-
-```bash
-.venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
-  --mlx-prefix mlx-community/whisper- \
-  --mlx-suffix -mlx
-```
-
 Download only selected model weights:
 
 ```bash

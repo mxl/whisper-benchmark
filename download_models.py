@@ -12,6 +12,7 @@ from benchmark_whisper import (
     INSANELY_FAST_WHISPER_REPOS,
     LIGHTNING_WHISPER_MLX_REPOS,
     MLX_AUDIO_WHISPER_REPOS,
+    MLX_WHISPER_REPOS,
 )
 
 
@@ -31,15 +32,6 @@ OPENAI_WHISPER_MODELS = {
     "medium": "medium",
     "large-v3": "large-v3",
     "large-v3-turbo": "turbo",
-}
-
-MLX_WHISPER_REPOS = {
-    "tiny": "mlx-community/whisper-tiny-mlx",
-    "base": "mlx-community/whisper-base-mlx",
-    "small": "mlx-community/whisper-small-mlx",
-    "medium": "mlx-community/whisper-medium-mlx",
-    "large-v3": "mlx-community/whisper-large-v3-mlx",
-    "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
 }
 
 

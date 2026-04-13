@@ -98,8 +98,6 @@ class OutputHelperTests(unittest.TestCase):
             condition_on_previous_text=False,
             hallucination_silence_threshold=2.0,
             openai_whisper_temperature_fallback=True,
-            mlx_prefix="mlx-community/whisper-",
-            mlx_suffix="-mlx",
             lightning_whisper_mlx_batch_size=12,
             insanely_fast_whisper_device_id="mps",
             insanely_fast_whisper_batch_size=1,
@@ -124,6 +122,8 @@ class OutputHelperTests(unittest.TestCase):
         self.assertEqual(metadata["condition_on_previous_text"], False)
         self.assertEqual(metadata["hallucination_silence_threshold"], 2.0)
         self.assertEqual(metadata["warmup"], True)
+        self.assertNotIn("mlx_prefix", metadata)
+        self.assertNotIn("mlx_suffix", metadata)
         self.assertIn("platform", metadata)
         self.assertIn("python_version", metadata)
 
@@ -174,8 +174,6 @@ class BenchmarkCliTests(unittest.TestCase):
             openai_whisper_temperature_fallback=True,
             hallucination_silence_threshold=2.0,
             device="auto",
-            mlx_prefix="mlx-community/whisper-",
-            mlx_suffix="-mlx",
             output=output_path,
             reference_transcript=None,
             warmup=False,
@@ -275,6 +273,10 @@ class ParityTests(unittest.TestCase):
 
     def test_backend_capabilities_match_repo_maps_for_supported_backends(self) -> None:
         self.assertEqual(
+            benchmark_whisper.BACKEND_CAPABILITIES["mlx-whisper"].supported_models,
+            set(benchmark_whisper.MLX_WHISPER_REPOS),
+        )
+        self.assertEqual(
             benchmark_whisper.BACKEND_CAPABILITIES["mlx-audio"].supported_models,
             set(benchmark_whisper.MLX_AUDIO_WHISPER_REPOS),
         )
@@ -296,6 +298,10 @@ class ParityTests(unittest.TestCase):
         )
 
     def test_downloader_imported_repo_maps_match_benchmark_repo_maps(self) -> None:
+        self.assertEqual(
+            download_models.MLX_WHISPER_REPOS,
+            benchmark_whisper.MLX_WHISPER_REPOS,
+        )
         self.assertEqual(
             download_models.MLX_AUDIO_WHISPER_REPOS,
             benchmark_whisper.MLX_AUDIO_WHISPER_REPOS,
