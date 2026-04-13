@@ -30,7 +30,7 @@ OPENAI_WHISPER_MODELS = {
     "small": "small",
     "medium": "medium",
     "large-v3": "large-v3",
-    "large-v3-turbo": "large-v3-turbo",
+    "large-v3-turbo": "turbo",
 }
 
 MLX_WHISPER_REPOS = {
