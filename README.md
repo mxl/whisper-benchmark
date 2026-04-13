@@ -146,9 +146,9 @@ Run the unit test suite with:
 The script prints a summary table like:
 
 ```text
-backend         model      ok    avg_total_s   median_total_s   load_s   avg_transcribe_s
-faster-whisper  tiny       3/3   1.234         1.210            0.456    0.778
-mlx-whisper     tiny       3/3   0.987         0.981            0.123    0.864
+backend         device  model      ok    avg_total_s   median_total_s   load_s   avg_transcribe_s
+faster-whisper  cpu     tiny       3/3   1.234         1.210            0.456    0.778
+mlx-whisper     mlx     tiny       3/3   0.987         0.981            0.123    0.864
 ```
 
 When `--reference-transcript` is provided, the summary also includes `avg_wer` and `avg_cer`.

@@ -972,6 +972,7 @@ def stdev_or_none(values: list[float]) -> float | None:
 def print_summary(aggregated: list[dict[str, Any]]) -> None:
     headers = [
         "backend",
+        "device",
         "model",
         "ok",
         "avg_total_s",
@@ -988,6 +989,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
         rows.append(
             [
                 row["backend"],
+                row.get("backend_device") or "-",
                 row["model"],
                 f"{row['successful_runs']}/{row['runs']}",
                 format_float(row["avg_total_seconds"]),
@@ -1013,6 +1015,7 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
         print("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)))
     print("\nColumns:")
     print("backend: benchmarked engine")
+    print("device: device or runtime label reported by the backend")
     print("model: normalized model name requested by the benchmark")
     print("ok: successful runs over total runs")
     print("avg_total_s: average end-to-end runtime in seconds")

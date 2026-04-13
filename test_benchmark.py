@@ -152,6 +152,33 @@ class OutputHelperTests(unittest.TestCase):
         self.assertEqual(aggregated[0]["load_seconds"], 1.25)
         self.assertNotIn("avg_load_seconds", aggregated[0])
 
+    def test_print_summary_includes_backend_device_column(self) -> None:
+        aggregated = [
+            {
+                "backend": "mlx-whisper",
+                "backend_device": "mlx",
+                "model": "tiny",
+                "runs": 1,
+                "successful_runs": 1,
+                "avg_total_seconds": 3.75,
+                "median_total_seconds": 3.75,
+                "load_seconds": 1.25,
+                "avg_transcribe_seconds": 2.5,
+                "stddev_transcribe_seconds": None,
+                "avg_rtf": 0.25,
+                "avg_wer": None,
+                "avg_cer": None,
+            }
+        ]
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            benchmark_whisper.print_summary(aggregated)
+
+        output = stdout.getvalue()
+        self.assertIn("device", output)
+        self.assertIn("mlx", output)
+
     def test_write_json_writes_pretty_json_with_trailing_newline(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "result.json"
