@@ -1005,6 +1005,14 @@ def print_summary(aggregated: list[dict[str, Any]]) -> None:
     print("avg_cer: average character error rate against the reference transcript")
 
 
+def print_skipped_summary(skipped: list[SkippedBenchmark]) -> None:
+    if not skipped:
+        return
+    print("\nSkipped:")
+    for item in skipped:
+        print(f"{item.backend} {item.model}: {item.reason}")
+
+
 def format_float(value: float | None) -> str:
     return f"{value:.3f}" if value is not None else "n/a"
 
@@ -1132,6 +1140,7 @@ def main() -> int:
     }
     write_json(args.output, payload)
     print_summary(aggregated)
+    print_skipped_summary(skipped)
     print(f"\nWrote JSON results to {args.output}")
     return 0
 

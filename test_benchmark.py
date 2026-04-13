@@ -173,6 +173,7 @@ class BenchmarkCliTests(unittest.TestCase):
         )
 
         stderr = io.StringIO()
+        stdout = io.StringIO()
         with (
             mock.patch.object(benchmark_whisper, "parse_args", return_value=fake_args),
             mock.patch.object(
@@ -204,7 +205,7 @@ class BenchmarkCliTests(unittest.TestCase):
                 "write_json",
                 side_effect=lambda _path, payload: written_payload.update(payload),
             ),
-            mock.patch.object(benchmark_whisper, "print_summary"),
+            contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
         ):
             exit_code = benchmark_whisper.main()
@@ -226,6 +227,11 @@ class BenchmarkCliTests(unittest.TestCase):
         )
         self.assertEqual(written_payload["summary"], [])
         self.assertEqual(written_payload["runs"], [])
+        self.assertIn("Skipped:", stdout.getvalue())
+        self.assertIn(
+            "lightning-whisper-mlx large-v3-turbo: not supported",
+            stdout.getvalue(),
+        )
 
 
 class DownloadModelsCliTests(unittest.TestCase):
