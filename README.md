@@ -12,7 +12,7 @@ This repo benchmarks `faster-whisper`, `mlx-whisper`, `mlx-audio`, `lightning-wh
 - `openai-whisper`: model load time and transcription time via the original Python package
 - optional WER/CER scoring against a reference transcript
 - repeated runs per backend/model pair
-- JSON output for analysis and optional CSV output for spreadsheets
+- JSON output for analysis
 
 ## Setup
 
@@ -44,14 +44,13 @@ Basic run across `tiny`, `base`, `small`, `medium`, `large-v3`, and `large-v3-tu
 .venv/bin/python benchmark_whisper.py /path/to/audio.mp3
 ```
 
-Run two repetitions, add warmup, and write CSV too:
+Run two repetitions and add warmup:
 
 ```bash
 .venv/bin/python benchmark_whisper.py /path/to/audio.mp3 \
   --runs 2 \
   --warmup \
-  --output results.json \
-  --csv-output results.csv
+  --output results.json
 ```
 
 Only benchmark selected models:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import platform
 import re
@@ -233,12 +232,6 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Path to write JSON results. Defaults to a timestamped filename.",
-    )
-    parser.add_argument(
-        "--csv-output",
-        type=Path,
-        default=None,
-        help="Optional path to also write flat CSV results.",
     )
     parser.add_argument(
         "--reference-transcript",
@@ -1021,32 +1014,12 @@ def write_json(output_path: Path, payload: dict[str, Any]) -> None:
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def write_csv(output_path: Path, results: list[RunResult]) -> None:
-    fieldnames = (
-        list(asdict(results[0]).keys())
-        if results
-        else list(RunResult.__dataclass_fields__.keys())
-    )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for result in results:
-            writer.writerow(asdict(result))
-
-
-def resolve_output_paths(
-    output: Path | None, csv_output: Path | None
-) -> tuple[Path, Path | None]:
+def resolve_output_paths(output: Path | None) -> Path:
     if output is not None:
-        return output, csv_output
+        return output
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_output = Path("output") / f"benchmark_results_{timestamp}.json"
-    if csv_output is None:
-        return json_output, None
-
-    return json_output, csv_output
+    return Path("output") / f"benchmark_results_{timestamp}.json"
 
 
 def build_metadata(
@@ -1084,7 +1057,7 @@ def build_metadata(
 
 def main() -> int:
     args = parse_args()
-    args.output, args.csv_output = resolve_output_paths(args.output, args.csv_output)
+    args.output = resolve_output_paths(args.output)
     audio_path = ensure_audio_file(args.audio)
     audio_duration_seconds = get_audio_duration_seconds(audio_path)
     args.reference_transcript_text = load_reference_transcript(
@@ -1158,12 +1131,8 @@ def main() -> int:
         "runs": [asdict(result) for result in results],
     }
     write_json(args.output, payload)
-    if args.csv_output is not None:
-        write_csv(args.csv_output, results)
     print_summary(aggregated)
     print(f"\nWrote JSON results to {args.output}")
-    if args.csv_output is not None:
-        print(f"Wrote CSV results to {args.csv_output}")
     return 0
 
 

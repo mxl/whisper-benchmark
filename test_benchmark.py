@@ -64,25 +64,23 @@ class BackendCapabilitiesTests(unittest.TestCase):
 
 
 class OutputHelperTests(unittest.TestCase):
-    def test_resolve_output_paths_uses_explicit_paths_when_provided(self) -> None:
+    def test_resolve_output_paths_uses_explicit_path_when_provided(self) -> None:
         json_path = Path("custom/results.json")
-        csv_path = Path("custom/results.csv")
         self.assertEqual(
-            benchmark_whisper.resolve_output_paths(json_path, csv_path),
-            (json_path, csv_path),
+            benchmark_whisper.resolve_output_paths(json_path),
+            json_path,
         )
 
-    def test_resolve_output_paths_generates_timestamped_default_json_path(self) -> None:
+    def test_resolve_output_paths_generates_timestamped_default_path(self) -> None:
         fake_now = mock.Mock()
         fake_now.strftime.return_value = "20260413_120000"
         with mock.patch.object(benchmark_whisper, "datetime") as mock_datetime:
             mock_datetime.now.return_value = fake_now
-            json_path, csv_path = benchmark_whisper.resolve_output_paths(None, None)
+            json_path = benchmark_whisper.resolve_output_paths(None)
         self.assertEqual(
             json_path,
             Path("output") / "benchmark_results_20260413_120000.json",
         )
-        self.assertIsNone(csv_path)
 
     def test_build_metadata_includes_current_benchmark_options(self) -> None:
         args = argparse.Namespace(
@@ -166,7 +164,6 @@ class BenchmarkCliTests(unittest.TestCase):
             mlx_prefix="mlx-community/whisper-",
             mlx_suffix="-mlx",
             output=output_path,
-            csv_output=None,
             reference_transcript=None,
             warmup=False,
             insanely_fast_whisper_device_id="mps",
@@ -181,7 +178,7 @@ class BenchmarkCliTests(unittest.TestCase):
             mock.patch.object(
                 benchmark_whisper,
                 "resolve_output_paths",
-                return_value=(output_path, None),
+                return_value=output_path,
             ),
             mock.patch.object(
                 benchmark_whisper, "ensure_audio_file", return_value=Path("audio.mp3")
