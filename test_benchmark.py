@@ -47,6 +47,22 @@ class ErrorResultTests(unittest.TestCase):
         self.assertIsNone(result.total_seconds)
 
 
+class BackendCapabilitiesTests(unittest.TestCase):
+    def test_hallucination_threshold_helper_respects_backend_capabilities(self) -> None:
+        args = argparse.Namespace(hallucination_silence_threshold=2.0)
+        self.assertEqual(
+            benchmark_whisper.hallucination_silence_threshold_for_backend(
+                "mlx-whisper", args
+            ),
+            2.0,
+        )
+        self.assertIsNone(
+            benchmark_whisper.hallucination_silence_threshold_for_backend(
+                "mlx-audio", args
+            )
+        )
+
+
 class BenchmarkCliTests(unittest.TestCase):
     def test_boolean_optional_flags_parse(self) -> None:
         with mock.patch(
@@ -111,8 +127,13 @@ class BenchmarkCliTests(unittest.TestCase):
             ),
             mock.patch.object(
                 benchmark_whisper,
-                "BACKEND_SUPPORTED_MODELS",
-                {"lightning-whisper-mlx": {"tiny"}},
+                "BACKEND_CAPABILITIES",
+                {
+                    "lightning-whisper-mlx": benchmark_whisper.BackendCapabilities(
+                        supported_models={"tiny"},
+                        supports_hallucination_silence_threshold=True,
+                    )
+                },
             ),
             mock.patch.object(benchmark_whisper, "write_json"),
             mock.patch.object(benchmark_whisper, "print_summary"),

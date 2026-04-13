@@ -55,14 +55,6 @@ INSANELY_FAST_WHISPER_REPOS = {
     "large-v3": "openai/whisper-large-v3",
     "large-v3-turbo": "openai/whisper-large-v3-turbo",
 }
-BACKEND_SUPPORTED_MODELS: dict[str, set[str] | None] = {
-    "faster-whisper": None,
-    "mlx-whisper": None,
-    "mlx-audio": set(MLX_AUDIO_WHISPER_REPOS),
-    "lightning-whisper-mlx": set(LIGHTNING_WHISPER_MLX_REPOS),
-    "insanely-fast-whisper": set(INSANELY_FAST_WHISPER_REPOS),
-    "openai-whisper": set(OPENAI_WHISPER_REPOS),
-}
 
 
 @dataclass
@@ -92,6 +84,40 @@ class BackendSession:
     device: str | None
     session: Any
     load_seconds: float | None
+
+
+@dataclass(frozen=True)
+class BackendCapabilities:
+    supported_models: set[str] | None
+    supports_hallucination_silence_threshold: bool
+
+
+BACKEND_CAPABILITIES: dict[str, BackendCapabilities] = {
+    "faster-whisper": BackendCapabilities(
+        supported_models=None,
+        supports_hallucination_silence_threshold=True,
+    ),
+    "mlx-whisper": BackendCapabilities(
+        supported_models=None,
+        supports_hallucination_silence_threshold=True,
+    ),
+    "mlx-audio": BackendCapabilities(
+        supported_models=set(MLX_AUDIO_WHISPER_REPOS),
+        supports_hallucination_silence_threshold=False,
+    ),
+    "lightning-whisper-mlx": BackendCapabilities(
+        supported_models=set(LIGHTNING_WHISPER_MLX_REPOS),
+        supports_hallucination_silence_threshold=True,
+    ),
+    "insanely-fast-whisper": BackendCapabilities(
+        supported_models=set(INSANELY_FAST_WHISPER_REPOS),
+        supports_hallucination_silence_threshold=False,
+    ),
+    "openai-whisper": BackendCapabilities(
+        supported_models=set(OPENAI_WHISPER_REPOS),
+        supports_hallucination_silence_threshold=True,
+    ),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -395,6 +421,15 @@ def build_error_result(
     )
 
 
+def hallucination_silence_threshold_for_backend(
+    backend: str, args: argparse.Namespace
+) -> float | None:
+    capabilities = BACKEND_CAPABILITIES[backend]
+    if not capabilities.supports_hallucination_silence_threshold:
+        return None
+    return args.hallucination_silence_threshold or None
+
+
 def run_faster_whisper(
     audio_path: Path,
     model_name: str,
@@ -404,7 +439,7 @@ def run_faster_whisper(
     load_seconds: float | None,
 ) -> RunResult:
     transcribe_started = time.perf_counter()
-    hal_threshold = args.hallucination_silence_threshold or None
+    hal_threshold = hallucination_silence_threshold_for_backend("faster-whisper", args)
     segments, info = session.transcribe(
         str(audio_path),
         beam_size=args.beam_size,
@@ -442,7 +477,7 @@ def run_mlx_whisper(
     import mlx_whisper
 
     transcribe_started = time.perf_counter()
-    hal_threshold = args.hallucination_silence_threshold or None
+    hal_threshold = hallucination_silence_threshold_for_backend("mlx-whisper", args)
     result = mlx_whisper.transcribe(
         str(audio_path),
         path_or_hf_repo=session["model_repo"],
@@ -555,7 +590,9 @@ def run_lightning_whisper_mlx(
 ) -> RunResult:
     from lightning_whisper_mlx.transcribe import transcribe_audio
 
-    hal_threshold = args.hallucination_silence_threshold or None
+    hal_threshold = hallucination_silence_threshold_for_backend(
+        "lightning-whisper-mlx", args
+    )
     transcribe_started = time.perf_counter()
     result = transcribe_audio(
         str(audio_path),
@@ -597,7 +634,7 @@ def run_openai_whisper(
         if args.openai_whisper_temperature_fallback
         else 0
     )
-    hal_threshold = args.hallucination_silence_threshold or None
+    hal_threshold = hallucination_silence_threshold_for_backend("openai-whisper", args)
     transcribe_started = time.perf_counter()
     result = session.transcribe(
         str(audio_path),
@@ -1050,7 +1087,7 @@ def main() -> int:
     results: list[RunResult] = []
     for model_name in args.models:
         for backend in args.backends:
-            supported = BACKEND_SUPPORTED_MODELS.get(backend)
+            supported = BACKEND_CAPABILITIES[backend].supported_models
             if supported is not None and model_name not in supported:
                 print(
                     f"Skipping {backend} on model {model_name} (not supported).",
