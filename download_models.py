@@ -84,6 +84,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Download insanely-fast-whisper model repos only.",
     )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        default=DEFAULT_MODELS,
+        help="Model names to download. Defaults to tiny base small medium large-v3 large-v3-turbo.",
+    )
     return parser.parse_args()
 
 
@@ -178,7 +184,7 @@ def main() -> int:
     engines = resolve_engines(args)
     failures: list[tuple[str, str]] = []
 
-    for model_name in DEFAULT_MODELS:
+    for model_name in args.models:
         if "faster-whisper" in engines:
             try:
                 download_faster_whisper(model_name)
@@ -221,7 +227,7 @@ def main() -> int:
             print(f"- {label}: {error}", file=sys.stderr, flush=True)
         return 1
 
-    print("\nAll default models downloaded successfully.", flush=True)
+    print("\nSelected models downloaded successfully.", flush=True)
     return 0
 
 
