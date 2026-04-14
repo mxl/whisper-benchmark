@@ -15,7 +15,9 @@ dependencies = [
     "insanely-fast-whisper>=0.0.15",
     "openai-whisper>=20250625",
     "jiwer>=3.0.5",
-    "torchcodec>=0.10,<0.11",
+    "torch>=2.11,<2.12",
+    "torchaudio>=2.11,<2.12",
+    "torchcodec>=0.11,<0.12",
 ]
 
 [project.scripts]
