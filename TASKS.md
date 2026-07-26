@@ -57,6 +57,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | Дата | Task | Изменение | Причина/evidence | Commit |
 |---|---|---|---|---|
 | 2026-07-26 | PLAN | Initial approved plan | User-approved scope | 49bad00 |
+| 2026-07-26 | PLAN | Add Parakeet FP32 via onnx-asr | Separate unquantized ONNX runtime requested; repo contains FP32 and INT8 variants | pending |
 
 ## Decision Log
 
@@ -84,7 +85,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 - M1 Research: U1, S1-S8. Exit: evidence/status for every runtime.
 - M2 Foundation: I1-I4. Exit: existing backends use one schema/runner.
 - M3 Measurement: I5-I6. Exit: reports and corpus profiles reproducible.
-- M4 Rollout: N1-N14. Exit: every ready variant has benchmark row.
+- M4 Rollout: N1-N14 plus N8.1. Exit: every ready variant has benchmark row.
 - M5 Readiness: C1-C3, D1-D5, R1. Exit: docs, CI, release gate complete.
 
 Critical path:
@@ -183,6 +184,30 @@ no model files. This is an S4 upstream-artifact blocker, not an incomplete user
 download. T0.3 commit: `3377326`. Commit subject for this task:
 `docs: record model cache readiness`; commit `e14ba93`.
 
+### - [ ] U2 Parakeet ONNX-ASR FP32 available in `/Volumes/512GB/hf`
+
+Status: READY. Owner: user. Priority: P0.
+
+Agent must not run this command:
+
+```bash
+hf download istupakov/parakeet-tdt-0.6b-v3-onnx \
+  --include "README.md" \
+  --include "config.json" \
+  --include "encoder-model.onnx" \
+  --include "encoder-model.onnx.data" \
+  --include "decoder_joint-model.onnx" \
+  --include "nemo128.onnx" \
+  --include "vocab.txt" \
+  --cache-dir "/Volumes/512GB/hf"
+```
+
+DoD: user confirms download; only unsuffixed FP32 ONNX artifacts are required;
+`.int8.onnx` files are absent or ignored; snapshot SHA and followed file sizes
+are recorded; agent commits `docs: record parakeet onnx cache readiness`.
+
+Result: waiting for user confirmation.
+
 ## M1: Spikes
 
 Spike statuses: `ready`, `blocked` with unblock task, or `unsupported` with
@@ -264,13 +289,14 @@ Result: TBD.
 
 ### - [ ] S4 Parakeet runtimes
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, S1.
 
-Probe official, MLX and sherpa-onnx on same EN/RU samples. Compare API,
-precision, transcripts, timestamps, load, RTFx, RAM and cleanup.
+Probe official, MLX, sherpa-onnx and onnx-asr FP32 on same EN/RU samples.
+Compare API, precision, transcripts, timestamps, load, RTFx, RAM and cleanup.
 
-DoD: all three have status/evidence; unblock tasks exist where needed; N6-N8
-assertions updated; commit `docs: record parakeet runtimes spike`.
+DoD: all four have status/evidence; unblock tasks exist where needed; N6-N8.1
+assertions updated; onnx-asr provider list and peak RAM are recorded; commit
+`docs: record parakeet runtimes spike`.
 
 Result: TBD.
 
@@ -454,6 +480,12 @@ DoD: MLX row; EN/RU smoke; parity vs N6; commit `feat: add parakeet mlx backend`
 
 ### - [ ] N8 Parakeet sherpa-onnx
 DoD: sherpa row; EN/RU smoke; parity vs N6; commit `feat: add parakeet sherpa onnx backend`. Result: TBD.
+
+### - [ ] N8.1 Parakeet ONNX-ASR FP32
+DoD: `runtime=onnx-asr`, `precision=fp32`; only unsuffixed ONNX files are
+loaded; EN/RU smoke; ONNX Runtime providers, peak RAM and parity vs N6 are
+recorded; no INT8 fallback; commit `feat: add parakeet onnx asr backend`.
+Result: TBD.
 
 ### - [ ] N9 Qwen3-ASR official
 DoD: S6 details applied; EN/RU smoke; memory fit; commit `feat: add official qwen3 asr backend`. Result: TBD.
