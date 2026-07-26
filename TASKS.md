@@ -109,17 +109,21 @@ Result: 2026-07-26. Existing uncommitted implementation was verified rather
 than recreated. Targeted regression test passed (1 test), full suite passed
 (39 tests), and `git diff --check` reported no errors. Diff is limited to
 `benchmark_whisper.py` and `test_benchmark.py`. Commit subject:
-`fix: update insanely-fast-whisper invocation`; hash will be recorded by T0.2.
+`fix: update insanely-fast-whisper invocation`; commit `32d543a`.
 
-### - [ ] T0.2 Direct Hugging Face dependency
+### - [x] T0.2 Direct Hugging Face dependency
 
-Status: READY. Owner: agent. Priority: P0. Depends on: T0.1.
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.1.
 
 DoD: `huggingface-hub` is direct dependency; `uv.lock` agrees; clean
 `uv sync`, tests and diff check pass; result recorded; commit
 `build: declare huggingface-hub dependency`.
 
-Result: TBD.
+Result: 2026-07-26. `uv sync` resolved 159 packages and rebuilt the editable
+project successfully. Full suite passed (39 tests), and `git diff --check`
+reported no errors. `huggingface-hub>=1.10.1` is present in both
+`pyproject.toml` and `uv.lock`. Commit subject:
+`build: declare huggingface-hub dependency`; hash will be recorded by T0.3.
 
 ### - [ ] T0.3 Ignore local state
 

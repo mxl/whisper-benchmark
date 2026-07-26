@@ -2872,6 +2872,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "faster-whisper" },
+    { name = "huggingface-hub" },
     { name = "insanely-fast-whisper" },
     { name = "jiwer" },
     { name = "lightning-whisper-mlx" },
@@ -2886,6 +2887,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "faster-whisper", specifier = ">=1.1.0" },
+    { name = "huggingface-hub", specifier = ">=1.10.1" },
     { name = "insanely-fast-whisper", specifier = ">=0.0.15" },
     { name = "jiwer", specifier = ">=3.0.5" },
     { name = "lightning-whisper-mlx", specifier = ">=0.0.10" },

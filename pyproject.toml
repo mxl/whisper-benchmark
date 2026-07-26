@@ -13,6 +13,7 @@ dependencies = [
     "mlx-audio>=0.4.2",
     "lightning-whisper-mlx>=0.0.10",
     "insanely-fast-whisper>=0.0.15",
+    "huggingface-hub>=1.10.1",
     "openai-whisper>=20250625",
     "jiwer>=3.0.5",
     "torch>=2.10,<2.11",
