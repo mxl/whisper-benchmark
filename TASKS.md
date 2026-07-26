@@ -9,7 +9,6 @@ effective config, accuracy, cold/warm timing, memory и disk footprint.
 Non-goals:
 
 - cloud API и streaming;
-- квантизированные Whisper/GGML веса;
 - legacy CLI и совместимость со старым JSON;
 - автоматическая загрузка моделей агентом или benchmark-кодом;
 - искусственный composite score.
@@ -20,6 +19,8 @@ Non-goals:
 ## Success Criteria
 
 - Каждая строка содержит model/runtime/weights/runtime-version provenance.
+- Каждая строка содержит effective precision и quantization scheme; качество
+  квантизированного варианта сравнивается с baseline тех же model/runtime.
 - Каждый ready backend проходит smoke profile без ручной правки кода.
 - Unit/contract tests не требуют моделей или сети.
 - Missing model/dependency даёт `skipped`, не падение общего запуска.
@@ -59,6 +60,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-26 | PLAN | Initial approved plan | User-approved scope | 49bad00 |
 | 2026-07-26 | PLAN | Add Parakeet FP32 via onnx-asr | Separate unquantized ONNX runtime requested; repo contains FP32 and INT8 variants | pending |
 | 2026-07-26 | PLAN | Add direct sherpa-onnx Parakeet FP32 repo | Verified separate encoder/decoder/joiner FP32 artifacts on Hugging Face | pending |
+| 2026-07-26 | PLAN | Benchmark quantized variants | User requested precision/quantization matrix instead of excluding quants | pending |
 
 ## Decision Log
 
@@ -86,7 +88,8 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 - M1 Research: U1, S1-S8. Exit: evidence/status for every runtime.
 - M2 Foundation: I1-I4. Exit: existing backends use one schema/runner.
 - M3 Measurement: I5-I6. Exit: reports and corpus profiles reproducible.
-- M4 Rollout: N1-N14 plus N8.1. Exit: every ready variant has benchmark row.
+- M4 Rollout: all N* tasks. Exit: every ready model/runtime/quantization
+  combination has its own benchmark row.
 - M5 Readiness: C1-C3, D1-D5, R1. Exit: docs, CI, release gate complete.
 
 Critical path:
@@ -185,7 +188,7 @@ no model files. This is an S4 upstream-artifact blocker, not an incomplete user
 download. T0.3 commit: `3377326`. Commit subject for this task:
 `docs: record model cache readiness`; commit `e14ba93`.
 
-### - [ ] U2 Parakeet ONNX-ASR FP32 available in `/Volumes/512GB/hf`
+### - [ ] U2 Parakeet ONNX-ASR FP32/INT8 available in `/Volumes/512GB/hf`
 
 Status: READY. Owner: user. Priority: P0.
 
@@ -198,14 +201,52 @@ hf download istupakov/parakeet-tdt-0.6b-v3-onnx \
   --include "encoder-model.onnx" \
   --include "encoder-model.onnx.data" \
   --include "decoder_joint-model.onnx" \
+  --include "encoder-model.int8.onnx" \
+  --include "decoder_joint-model.int8.onnx" \
   --include "nemo128.onnx" \
   --include "vocab.txt" \
   --cache-dir "/Volumes/512GB/hf"
 ```
 
-DoD: user confirms download; only unsuffixed FP32 ONNX artifacts are required;
-`.int8.onnx` files are absent or ignored; snapshot SHA and followed file sizes
-are recorded; agent commits `docs: record parakeet onnx cache readiness`.
+DoD: user confirms download; FP32 and INT8 file pairs exist; snapshot SHA and
+followed file sizes are recorded; agent commits
+`docs: record parakeet onnx cache readiness`.
+
+Result: waiting for user confirmation.
+
+### - [ ] U4 Quantized runtime artifacts available in `/Volumes/512GB/hf`
+
+Status: READY. Owner: user. Priority: P0.
+
+Agent must not run these commands:
+
+```bash
+hf download ggerganov/whisper.cpp \
+  --include "ggml-tiny-q5_1.bin" \
+  --include "ggml-tiny-q8_0.bin" \
+  --include "ggml-large-v3-turbo-q5_0.bin" \
+  --include "ggml-large-v3-turbo-q8_0.bin" \
+  --cache-dir "/Volumes/512GB/hf"
+
+hf download Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp16 \
+  --include "README.md" \
+  --include "SHA256SUMS" \
+  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp16/*" \
+  --exclude "*.tar.bz2" \
+  --cache-dir "/Volumes/512GB/hf"
+
+hf download Nordln/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8 \
+  --include "README.md" \
+  --include "encoder.int8.onnx" \
+  --include "decoder.int8.onnx" \
+  --include "joiner.int8.onnx" \
+  --include "tokens.txt" \
+  --cache-dir "/Volumes/512GB/hf"
+```
+
+DoD: user confirms download; exact repo revisions and followed sizes recorded;
+Whisper Q5/Q8 and Parakeet Sherpa FP16/INT8 files exist; archives are not
+duplicated; agent commits `docs: record quantized model cache readiness`.
 
 Result: waiting for user confirmation.
 
@@ -298,7 +339,8 @@ Commit subject: `docs: record hf cache spike`; hash will be recorded by S2.
 
 Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
 
-Probe: tiny FP16 on one EN/RU sample through pywhispercpp and official CLI.
+Probe: tiny FP16, Q5_1 and Q8_0 on one EN/RU sample through pywhispercpp and
+official CLI. Record transcript delta, load, RTFx, RSS and disk size per quant.
 Measure Metal info, load/inference, language/task/beam/VAD/timestamps, cleanup,
 RSS. Core ML excluded.
 
@@ -323,13 +365,15 @@ Result: TBD.
 
 ### - [ ] S4 Parakeet runtimes
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, U3, S1.
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, U3, U4, S1.
 
-Probe official, MLX, sherpa-onnx and onnx-asr FP32 on same EN/RU samples.
-Compare API, precision, transcripts, timestamps, load, RTFx, RAM and cleanup.
+Probe official, MLX, sherpa-onnx FP32/FP16/INT8 and onnx-asr FP32/INT8 on the
+same EN/RU samples. Compare API, precision, quantization, transcript delta,
+timestamps, load, RTFx, RAM, disk size and cleanup.
 
-DoD: all four have status/evidence; unblock tasks exist where needed; N6-N8.1
-assertions updated; onnx-asr provider list and peak RAM are recorded; commit
+DoD: every runtime/precision pair has status/evidence; unblock tasks exist
+where needed; N6-N8.4 assertions updated; provider list, peak RAM and quality
+delta against the unquantized runtime baseline are recorded; commit
 `docs: record parakeet runtimes spike`.
 
 Result: TBD.
@@ -447,7 +491,9 @@ Result: TBD.
 ### - [ ] I3 Replace result schema
 
 RED golden JSON for provenance, effective config, transcript, timing, accuracy,
-memory, footprint and status. No migration.
+memory, footprint and status. Quant fields are explicit: `storage_dtype`,
+`compute_dtype`, `quantization_scheme`, `quantization_bits`, and per-component
+mixed precision where encoder/decoder/joiner differ. No migration.
 
 DoD: golden test/schema docs green; JSON reproduces run; commit
 `feat!: replace benchmark result schema`.
@@ -469,7 +515,9 @@ Result: TBD.
 ### - [ ] I5 Reporting
 
 RED fixtures for common table, Pareto, same-weights, model-family,
-hardware/precision and P50/P95. No composite score.
+hardware/precision/quantization and P50/P95. Add accuracy, speed, RAM and disk
+deltas from each quantized row to its unquantized model/runtime baseline. No
+composite score.
 
 DoD: deterministic snapshots green; commit
 `feat: add benchmark report views`.
@@ -491,8 +539,23 @@ Result: TBD.
 Each: RED fake contract -> GREEN adapter -> RED cached integration -> GREEN real
 invocation -> VERIFY -> REFACTOR. Agent never downloads missing models.
 
+### - [ ] N0 Faster-whisper quantized compute
+DoD: same model weights benchmarked with supported CTranslate2 `int8` and
+`int8_float16` modes; unsupported modes are skipped with reason; effective
+compute type, EN/RU WER/CER, RTFx and RAM delta vs default recorded; commit
+`feat: add faster whisper quant configs`. Result: TBD.
+
 ### - [ ] N1 Whisper.cpp FP16
-DoD: tiny/turbo mapping; EN/RU smoke; Metal/provenance/timestamps; commit `feat: add whisper cpp backend`. Result: TBD.
+DoD: tiny/turbo mapping; EN/RU smoke; Metal/provenance/timestamps;
+`quantization=none`; commit `feat: add whisper cpp backend`. Result: TBD.
+
+### - [ ] N1.1 Whisper.cpp Q5
+DoD: tiny Q5_1 and turbo Q5_0 rows; EN/RU smoke; quant metadata, disk/RAM/RTFx
+and WER/CER delta vs N1; commit `feat: add whisper cpp q5 configs`. Result: TBD.
+
+### - [ ] N1.2 Whisper.cpp Q8
+DoD: tiny/turbo Q8_0 rows; EN/RU smoke; quant metadata, disk/RAM/RTFx and
+WER/CER delta vs N1; commit `feat: add whisper cpp q8 configs`. Result: TBD.
 
 ### - [ ] N2 GigaAM CTC MLX
 DoD: separate row; RU smoke; provenance/punctuation; commit `feat: add gigaam ctc mlx backend`. Result: TBD.
@@ -519,11 +582,26 @@ precision is FP32; separate encoder/decoder/joiner layout validated; EN/RU
 smoke and parity vs N6 recorded; commit
 `feat: add parakeet sherpa onnx backend`. Result: TBD.
 
+### - [ ] N8.2 Parakeet sherpa-onnx FP16
+DoD: Yiivgeny FP16 repo with all encoder/decoder/joiner weights FP16; EN/RU
+smoke; size/RAM/RTFx and WER/CER delta vs N8; commit
+`feat: add parakeet sherpa fp16 config`. Result: TBD.
+
+### - [ ] N8.3 Parakeet sherpa-onnx INT8
+DoD: Nordln INT8 repo; all three components verified INT8; EN/RU smoke;
+size/RAM/RTFx and WER/CER delta vs N8; commit
+`feat: add parakeet sherpa int8 config`. Result: TBD.
+
 ### - [ ] N8.1 Parakeet ONNX-ASR FP32
-DoD: `runtime=onnx-asr`, `precision=fp32`; only unsuffixed ONNX files are
-loaded; EN/RU smoke; ONNX Runtime providers, peak RAM and parity vs N6 are
-recorded; no INT8 fallback; commit `feat: add parakeet onnx asr backend`.
+DoD: `runtime=onnx-asr`, `precision=fp32`, `quantization=none`; only
+unsuffixed ONNX files are loaded; EN/RU smoke; ONNX Runtime providers, peak
+RAM and parity vs N6 are recorded; commit `feat: add parakeet onnx asr backend`.
 Result: TBD.
+
+### - [ ] N8.4 Parakeet ONNX-ASR INT8
+DoD: only `.int8.onnx` encoder/decoder-joint files are loaded; no FP32 fallback;
+EN/RU smoke; provider, size/RAM/RTFx and WER/CER delta vs N8.1 recorded;
+commit `feat: add parakeet onnx asr int8 config`. Result: TBD.
 
 ### - [ ] N9 Qwen3-ASR official
 DoD: S6 details applied; EN/RU smoke; memory fit; commit `feat: add official qwen3 asr backend`. Result: TBD.
