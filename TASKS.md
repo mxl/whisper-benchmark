@@ -143,9 +143,9 @@ next completed task.
 
 ## User Prerequisite
 
-### - [ ] U1 Models available in `/Volumes/512GB/hf`
+### - [x] U1 Models available in `/Volumes/512GB/hf`
 
-Status: READY. Owner: user. Priority: P0.
+Status: DONE. Owner: user. Priority: P0.
 
 Agent must not run these commands. User download list:
 
@@ -172,7 +172,16 @@ DoD: user confirms completion; volume readable; snapshots exist; FP16
 `ggml-tiny.bin` and `ggml-large-v3-turbo.bin` exist; agent records evidence
 and commits `docs: record model cache readiness`.
 
-Result: waiting for user confirmation.
+Result: 2026-07-26. User confirmed downloads. Read-only inspection found all
+listed repo snapshots under `/Volumes/512GB/hf/hub`, including both required
+non-quantized whisper.cpp files. GigaAM MLX CTC/RNNT, official GigaAM,
+Parakeet official/MLX, Qwen official/MLX, Canary official/MLX, and both Vosk
+repos contain their expected model artifacts. Snapshot SHAs were recorded by
+directory inspection. The sherpa-onnx Parakeet snapshot exists, but contains
+only `.gitattributes`; `hf models info` confirms the upstream repo itself has
+no model files. This is an S4 upstream-artifact blocker, not an incomplete user
+download. T0.3 commit: `3377326`. Commit subject for this task:
+`docs: record model cache readiness`; hash will be recorded by S1.
 
 ## M1: Spikes
 
