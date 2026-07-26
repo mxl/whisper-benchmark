@@ -62,7 +62,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 
 | ID | Task | Решение | Альтернативы | Последствия | Status |
 |---|---|---|---|---|---|
-| D-001 | S1 | TBD | env vs explicit snapshot paths | TBD | OPEN |
+| D-001 | S1 | Resolve exact local snapshot, then pass its path to backend | repo ID passed directly to backend | Prevents downloads and pins SHA; env remains required | CLOSED |
 | D-002 | S2 | TBD | pywhispercpp vs whisper-cli | TBD | OPEN |
 | D-003 | S5 | TBD | in-process vs isolated worker | TBD | OPEN |
 
@@ -72,7 +72,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 |---|---|---|---|---|---|
 | Risk | MLX ports differ from official weights | High | parity spikes | agent | OPEN |
 | Risk | NeMo/Qwen dependency conflicts | High | S5 isolation | agent | OPEN |
-| Risk | Library ignores external HF cache | High | S1 explicit paths | agent | OPEN |
+| Risk | Library ignores external HF cache | High | S1 explicit paths | agent | MITIGATED |
 | Risk | Memory metrics are incomparable | High | S5 methodology | agent | OPEN |
 | Risk | Corpus license/reference errors | High | S8 evidence gate | user+agent | OPEN |
 | Risk | Premature abstractions | Medium | spike-first TDD | agent | OPEN |
@@ -181,16 +181,16 @@ directory inspection. The sherpa-onnx Parakeet snapshot exists, but contains
 only `.gitattributes`; `hf models info` confirms the upstream repo itself has
 no model files. This is an S4 upstream-artifact blocker, not an incomplete user
 download. T0.3 commit: `3377326`. Commit subject for this task:
-`docs: record model cache readiness`; hash will be recorded by S1.
+`docs: record model cache readiness`; commit `e14ba93`.
 
 ## M1: Spikes
 
 Spike statuses: `ready`, `blocked` with unblock task, or `unsupported` with
 evidence. GigaAM CTC/RNNT and all Parakeet runtimes remain separate configs.
 
-### - [ ] S1 HF cache resolution
+### - [x] S1 HF cache resolution
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1.
+Status: DONE. Owner: agent. Priority: P0. Depends on: U1.
 
 Hypothesis: all runtimes can read one cache without project-local copies.
 
@@ -201,7 +201,39 @@ DoD: commands, versions and paths recorded; resolution strategy per runtime;
 blockers captured; I1/I2 updated; D-001 closed; commit
 `docs: record hf cache spike`.
 
-Result: TBD.
+Result: 2026-07-26.
+
+- Environment: Python 3.13, `huggingface-hub 1.10.1`, `mlx 0.31.1`,
+  `mlx-whisper 0.4.3`, `transformers 5.5.3`.
+- `HF_HOME=/Volumes/512GB/hf` and
+  `HUGGINGFACE_HUB_CACHE=/Volumes/512GB/hf/hub` are honored when set before
+  importing Hugging Face libraries.
+- `snapshot_download(..., local_files_only=True)` resolved official Parakeet,
+  MLX Parakeet, GigaAM, Qwen, Canary and Vosk snapshots without network access.
+- `hf_hub_download(..., local_files_only=True)` resolved
+  `ggml-tiny.bin` to snapshot SHA `5359861...`; followed sizes are 77,691,713
+  bytes for tiny and 1,624,555,275 bytes for large-v3-turbo.
+- `mlx_whisper.load_model` and `mlx_audio.get_model_path` accept an existing
+  snapshot path and then avoid their internal `snapshot_download` branch.
+- Decision: production `resolve_model()` must call Hugging Face with exact
+  repo/revision, `cache_dir=/Volumes/512GB/hf/hub`, and
+  `local_files_only=True`, then pass the returned local path to every backend.
+  Raw files use `hf_hub_download` with the same constraints.
+- Provenance stores repo ID, requested revision, resolved snapshot SHA and
+  snapshot path. Disk sizing follows symlinks; raw symlink size is invalid.
+- Existing duplicate official Parakeet blobs were found under
+  `~/.cache/huggingface/hub`; S1 did not create or remove them. C1/C2 should
+  warn about known-repo duplicates outside the canonical cache.
+- AppleDouble `._*` files on the external volume make `hf cache list` fail
+  with a UTF-8 decode error. C2 must scan known repo directories directly and
+  ignore `._*`; it must not shell out to `hf cache list`.
+- Current `transformers 5.5.3` resolves the local Parakeet snapshot but does
+  not recognize `model_type=parakeet_tdt`. This is an S4 runtime blocker, not
+  a cache-resolution failure.
+- Optional spike runtimes are not installed yet: `pywhispercpp`,
+  `nemo_toolkit`, and `sherpa-onnx`.
+
+Commit subject: `docs: record hf cache spike`; hash will be recorded by S2.
 
 ### - [ ] S2 Whisper.cpp API and Metal
 
@@ -296,6 +328,11 @@ Status: READY. Owner: agent. Priority: P0. Depends on: S1-S5.
 
 RED for confirmed `probe`, `resolve_model`, `load`, `transcribe`, `close`,
 `capabilities`, `effective_config`. GREEN protocol/registry with faster-whisper.
+
+`resolve_model` requirements from S1: canonical cache root is
+`/Volumes/512GB/hf/hub`; resolve exact revision with `local_files_only=True`;
+return repo ID, requested revision, snapshot SHA/path and optional filename;
+pass local paths to adapters; never let adapters download implicitly.
 
 DoD: RED precedes code; faster-whisper behavior preserved; no speculative
 cloud/streaming hooks; suite green; commit
@@ -442,7 +479,10 @@ DoD: CPU RU smoke; comparison with N13; commit `feat: add vosk full ru backend`.
 DoD: RED volume/cache/dependency/hardware tests; no downloads; actionable output; commit `feat: add benchmark doctor command`. Result: TBD.
 
 ### - [ ] C2 Add `stt-benchmark models`
-DoD: RED inventory tests; read-only `/Volumes/512GB/hf`; repo/revision/size status; commit `feat: add model inventory command`. Result: TBD.
+DoD: RED inventory tests; read-only `/Volumes/512GB/hf`; direct known-repo
+scan ignores AppleDouble `._*`; no `hf cache list` subprocess; reports
+repo/revision/size and duplicate known repos outside canonical cache; commit
+`feat: add model inventory command`. Result: TBD.
 
 ### - [ ] C3 CI without model downloads
 DoD: clean-runner unit/contract green; optional Apple Silicon job documented; commit `ci: test benchmark without model downloads`. Result: TBD.
