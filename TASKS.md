@@ -1,0 +1,459 @@
+# План улучшения STT-бенчмарка
+
+## Project Charter
+
+Цель: единый локальный offline benchmark для EN/RU STT model/runtime
+комбинаций на Apple Silicon. Результаты должны содержать provenance,
+effective config, accuracy, cold/warm timing, memory и disk footprint.
+
+Non-goals:
+
+- cloud API и streaming;
+- квантизированные Whisper/GGML веса;
+- legacy CLI и совместимость со старым JSON;
+- автоматическая загрузка моделей агентом или benchmark-кодом;
+- искусственный composite score.
+
+Модели хранятся только в HF cache `/Volumes/512GB/hf`. Модели скачивает
+пользователь. Агент не запускает `hf download`.
+
+## Success Criteria
+
+- Каждая строка содержит model/runtime/weights/runtime-version provenance.
+- Каждый ready backend проходит smoke profile без ручной правки кода.
+- Unit/contract tests не требуют моделей или сети.
+- Missing model/dependency даёт `skipped`, не падение общего запуска.
+- Проект не создаёт копии весов вне `/Volumes/512GB/hf`.
+- Сохранённая CLI-команда и JSON config воспроизводят опубликованный отчёт.
+- Допустимый разброс warm RTFx определяется spike S5.
+
+## Workflow
+
+- Checkbox: `- [ ]` до начала, `- [x]` после завершения.
+- Status: `READY`, `IN_PROGRESS`, `BLOCKED`, `DONE`.
+- Одновременно выполняется одна agent-задача; U1 может идти параллельно.
+- Production-код нового backend запрещён до связанного spike.
+- Код: `RED -> GREEN -> REFACTOR`; GREEN содержит минимальный код.
+- После каждой задачи: проверки, evidence, результат, обновление зависимых
+  задач, checkbox/status, отдельный commit, фиксация commit hash.
+- Один task = один commit. Несколько задач в commit не объединять.
+- После каждого spike остановиться на plan update gate.
+- Результат spike хранить прямо в его задаче: дата, environment, hypothesis,
+  commands, observations, measurements, decision, consequences, blockers,
+  follow-up tasks.
+
+## Task Template
+
+Перед началом дополнить задачу:
+
+- `Status`, `Owner`, `Priority`, `Dependencies`;
+- `Deliverables`, `Evidence`, `Commit`.
+
+Definition of Done всегда включает: acceptance criteria выполнены, тесты
+green, `TASKS.md` обновлён, задача отмечена, создан отдельный commit.
+
+## Change Log
+
+| Дата | Task | Изменение | Причина/evidence | Commit |
+|---|---|---|---|---|
+| 2026-07-26 | PLAN | Initial approved plan | User-approved scope | pending |
+
+## Decision Log
+
+| ID | Task | Решение | Альтернативы | Последствия | Status |
+|---|---|---|---|---|---|
+| D-001 | S1 | TBD | env vs explicit snapshot paths | TBD | OPEN |
+| D-002 | S2 | TBD | pywhispercpp vs whisper-cli | TBD | OPEN |
+| D-003 | S5 | TBD | in-process vs isolated worker | TBD | OPEN |
+
+## RAID Register
+
+| Type | Item | Impact | Mitigation | Owner | Status |
+|---|---|---|---|---|---|
+| Risk | MLX ports differ from official weights | High | parity spikes | agent | OPEN |
+| Risk | NeMo/Qwen dependency conflicts | High | S5 isolation | agent | OPEN |
+| Risk | Library ignores external HF cache | High | S1 explicit paths | agent | OPEN |
+| Risk | Memory metrics are incomparable | High | S5 methodology | agent | OPEN |
+| Risk | Corpus license/reference errors | High | S8 evidence gate | user+agent | OPEN |
+| Risk | Premature abstractions | Medium | spike-first TDD | agent | OPEN |
+| Dependency | Models downloaded by user | High | U1 gate | user | OPEN |
+
+## Milestones
+
+- M0 Baseline: PLAN, T0.1-T0.3. Exit: clean worktree, tests green.
+- M1 Research: U1, S1-S8. Exit: evidence/status for every runtime.
+- M2 Foundation: I1-I4. Exit: existing backends use one schema/runner.
+- M3 Measurement: I5-I6. Exit: reports and corpus profiles reproducible.
+- M4 Rollout: N1-N14. Exit: every ready variant has benchmark row.
+- M5 Readiness: C1-C3, D1-D5, R1. Exit: docs, CI, release gate complete.
+
+Critical path:
+`PLAN -> T0 -> U1/S1 -> S2-S5 -> I1 -> I2 -> I3 -> I4 -> I5/I6 -> N* -> C*/D* -> R1`.
+
+## M0: Current Worktree
+
+### - [ ] T0.1 Insanely Fast Whisper fix
+
+Status: READY. Owner: agent. Priority: P0.
+
+RED: test requires `return_timestamps=True` and rejects
+`condition_on_prev_tokens`.
+
+GREEN: minimal `benchmark_whisper.py` and `test_benchmark.py` changes.
+
+DoD: targeted test proves regression; full unittest and `git diff --check`
+pass; unrelated files excluded; result recorded; commit
+`fix: update insanely-fast-whisper invocation`.
+
+Result: TBD.
+
+### - [ ] T0.2 Direct Hugging Face dependency
+
+Status: READY. Owner: agent. Priority: P0. Depends on: T0.1.
+
+DoD: `huggingface-hub` is direct dependency; `uv.lock` agrees; clean
+`uv sync`, tests and diff check pass; result recorded; commit
+`build: declare huggingface-hub dependency`.
+
+Result: TBD.
+
+### - [ ] T0.3 Ignore local state
+
+Status: READY. Owner: agent. Priority: P0. Depends on: T0.2.
+
+RED: `.opencode/` and `models/` appear in status.
+
+GREEN: ignore both without deleting local files.
+
+DoD: status no longer lists them; result recorded; commit
+`chore: ignore local benchmark state`.
+
+Result: TBD.
+
+## User Prerequisite
+
+### - [ ] U1 Models available in `/Volumes/512GB/hf`
+
+Status: READY. Owner: user. Priority: P0.
+
+Agent must not run these commands. User download list:
+
+```bash
+export HF_HOME="/Volumes/512GB/hf"
+export HUGGINGFACE_HUB_CACHE="/Volumes/512GB/hf/hub"
+
+hf download ggerganov/whisper.cpp --include "ggml-tiny.bin" --include "ggml-large-v3-turbo.bin" --cache-dir "/Volumes/512GB/hf"
+hf download aystream/GigaAM-v3-e2e-ctc-mlx --cache-dir "/Volumes/512GB/hf"
+hf download aystream/GigaAM-v3-e2e-rnnt-mlx --cache-dir "/Volumes/512GB/hf"
+hf download ai-sage/GigaAM-v3 --cache-dir "/Volumes/512GB/hf"
+hf download nvidia/parakeet-tdt-0.6b-v3 --cache-dir "/Volumes/512GB/hf"
+hf download mlx-community/parakeet-tdt-0.6b-v3 --cache-dir "/Volumes/512GB/hf"
+hf download csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp16 --cache-dir "/Volumes/512GB/hf"
+hf download Qwen/Qwen3-ASR-0.6B-hf --cache-dir "/Volumes/512GB/hf"
+hf download mlx-community/Qwen3-ASR-0.6B-8bit --cache-dir "/Volumes/512GB/hf"
+hf download nvidia/canary-1b-v2 --cache-dir "/Volumes/512GB/hf"
+hf download CogniSoftOrg/canary-1b-v2-mlx-bf16 --cache-dir "/Volumes/512GB/hf"
+hf download alphacep/vosk-model-small-ru --cache-dir "/Volumes/512GB/hf"
+hf download alphacep/vosk-model-ru --cache-dir "/Volumes/512GB/hf"
+```
+
+DoD: user confirms completion; volume readable; snapshots exist; FP16
+`ggml-tiny.bin` and `ggml-large-v3-turbo.bin` exist; agent records evidence
+and commits `docs: record model cache readiness`.
+
+Result: waiting for user confirmation.
+
+## M1: Spikes
+
+Spike statuses: `ready`, `blocked` with unblock task, or `unsupported` with
+evidence. GigaAM CTC/RNNT and all Parakeet runtimes remain separate configs.
+
+### - [ ] S1 HF cache resolution
+
+Status: READY. Owner: agent. Priority: P0. Depends on: U1.
+
+Hypothesis: all runtimes can read one cache without project-local copies.
+
+Probe: resolve one HF, one MLX and one raw whisper.cpp artifact. No production
+resolver. Check env handling, explicit snapshot paths, duplicates, SHA/size.
+
+DoD: commands, versions and paths recorded; resolution strategy per runtime;
+blockers captured; I1/I2 updated; D-001 closed; commit
+`docs: record hf cache spike`.
+
+Result: TBD.
+
+### - [ ] S2 Whisper.cpp API and Metal
+
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+
+Probe: tiny FP16 on one EN/RU sample through pywhispercpp and official CLI.
+Measure Metal info, load/inference, language/task/beam/VAD/timestamps, cleanup,
+RSS. Core ML excluded.
+
+DoD: binding and CLI result or reproducible blocker; commands/versions/metrics;
+integration decision; N1 RED plan updated; D-002 closed; commit
+`docs: record whisper cpp spike`.
+
+Result: TBD.
+
+### - [ ] S3 GigaAM CTC/RNNT parity
+
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+
+Probe MLX CTC, MLX RNNT, official CTC and official RNNT on same RU samples.
+Check transcript, punctuation, normalization, timestamps, silence, long audio,
+memory. EN is capability probe only.
+
+DoD: all four variants have status/evidence; differences recorded; N2-N5 and
+normalizer requirements updated; commit `docs: record gigaam spike`.
+
+Result: TBD.
+
+### - [ ] S4 Parakeet runtimes
+
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+
+Probe official, MLX and sherpa-onnx on same EN/RU samples. Compare API,
+precision, transcripts, timestamps, load, RTFx, RAM and cleanup.
+
+DoD: all three have status/evidence; unblock tasks exist where needed; N6-N8
+assertions updated; commit `docs: record parakeet runtimes spike`.
+
+Result: TBD.
+
+### - [ ] S5 Worker isolation and memory
+
+Status: READY. Owner: agent. Priority: P0.
+
+Probe one MLX and one native/PyTorch backend in-process vs subprocess. Measure
+startup, RSS, accelerator counters, IPC, crash and timeout isolation.
+
+DoD: lifecycle chosen; load/first/warm boundaries defined; RTFx tolerance set;
+I4 updated; D-003 closed; commit `docs: record worker isolation spike`.
+
+Result: TBD.
+
+### - [ ] S6 Qwen3-ASR runtimes
+
+Status: READY. Owner: agent. Priority: P1. Depends on: U1, S1, S5.
+
+Probe official HF and MLX 8-bit on EN/RU. Forced aligner excluded.
+
+DoD: both have metrics/dependencies/status; N9/N10 updated; commit
+`docs: record qwen asr spike`.
+
+Result: TBD.
+
+### - [ ] S7 Canary runtimes
+
+Status: READY. Owner: agent. Priority: P1. Depends on: U1, S1, S5.
+
+Probe official NeMo and MLX BF16 on EN/RU.
+
+DoD: parity, memory and stability recorded; N11/N12 or unblock tasks updated;
+commit `docs: record canary spike`.
+
+Result: TBD.
+
+### - [ ] S8 Corpus
+
+Status: READY. Owner: agent. Priority: P1.
+
+Research clean, long, noise, telephone, multi-speaker, names/numbers and
+code-switching EN/RU sources, licenses and reference quality.
+
+DoD: selected sources/licenses and exact manifest/profile sizes recorded; I6
+updated; commit `docs: record benchmark corpus spike`.
+
+Result: TBD.
+
+## M2: Foundation
+
+### - [ ] I1 Minimal backend contract
+
+Status: READY. Owner: agent. Priority: P0. Depends on: S1-S5.
+
+RED for confirmed `probe`, `resolve_model`, `load`, `transcribe`, `close`,
+`capabilities`, `effective_config`. GREEN protocol/registry with faster-whisper.
+
+DoD: RED precedes code; faster-whisper behavior preserved; no speculative
+cloud/streaming hooks; suite green; commit
+`refactor: introduce backend contract`.
+
+Result: TBD.
+
+### - [ ] I2.1 Adapt mlx-whisper
+
+DoD: RED contract test; minimal adapter green; suite green; commit
+`refactor: adapt mlx whisper backend`.
+
+Result: TBD.
+
+### - [ ] I2.2 Adapt mlx-audio
+
+DoD: RED contract test; minimal adapter green; suite green; commit
+`refactor: adapt mlx audio backend`.
+
+Result: TBD.
+
+### - [ ] I2.3 Adapt lightning-whisper-mlx
+
+DoD: RED contract test; minimal adapter green; suite green; commit
+`refactor: adapt lightning whisper backend`.
+
+Result: TBD.
+
+### - [ ] I2.4 Adapt insanely-fast-whisper
+
+DoD: RED contract test; timestamps behavior preserved; adapter and suite green;
+commit `refactor: adapt insanely fast whisper backend`.
+
+Result: TBD.
+
+### - [ ] I2.5 Adapt openai-whisper
+
+DoD: RED contract test; minimal adapter green; suite green; commit
+`refactor: adapt openai whisper backend`.
+
+Result: TBD.
+
+### - [ ] I2.6 Remove legacy entry points
+
+Depends on: I2.1-I2.5. RED CLI tests require only `stt-benchmark`.
+
+DoD: root scripts, force-include and wrappers removed; package build/suite green;
+commit `refactor!: remove legacy entry points`.
+
+Result: TBD.
+
+### - [ ] I3 Replace result schema
+
+RED golden JSON for provenance, effective config, transcript, timing, accuracy,
+memory, footprint and status. No migration.
+
+DoD: golden test/schema docs green; JSON reproduces run; commit
+`feat!: replace benchmark result schema`.
+
+Result: TBD.
+
+### - [ ] I4 Runner lifecycle and memory
+
+Depends on: S5, I1, I3. RED lifecycle, timeout, crash isolation, sequential
+execution, download exclusion, RSS and skipped behavior.
+
+DoD: S5 architecture implemented minimally; cold/first/warm separated; no
+cross-run contamination; commit `feat: add isolated benchmark runner`.
+
+Result: TBD.
+
+## M3: Measurement and Corpus
+
+### - [ ] I5 Reporting
+
+RED fixtures for common table, Pareto, same-weights, model-family,
+hardware/precision and P50/P95. No composite score.
+
+DoD: deterministic snapshots green; commit
+`feat: add benchmark report views`.
+
+Result: TBD.
+
+### - [ ] I6 Corpus profiles and normalizer
+
+Depends on: S8. RED manifest/license/profile, raw/normalized transcript, macro
+and duration-weighted aggregates.
+
+DoD: smoke/standard/extended valid; references verified; tests green; commit
+`feat: add benchmark corpus profiles`.
+
+Result: TBD.
+
+## M4: New Benchmark Configurations
+
+Each: RED fake contract -> GREEN adapter -> RED cached integration -> GREEN real
+invocation -> VERIFY -> REFACTOR. Agent never downloads missing models.
+
+### - [ ] N1 Whisper.cpp FP16
+DoD: tiny/turbo mapping; EN/RU smoke; Metal/provenance/timestamps; commit `feat: add whisper cpp backend`. Result: TBD.
+
+### - [ ] N2 GigaAM CTC MLX
+DoD: separate row; RU smoke; provenance/punctuation; commit `feat: add gigaam ctc mlx backend`. Result: TBD.
+
+### - [ ] N3 GigaAM RNNT MLX
+DoD: separate row; RU smoke; provenance; commit `feat: add gigaam rnnt mlx backend`. Result: TBD.
+
+### - [ ] N4 GigaAM CTC official
+DoD: PyTorch row; parity evidence; RU smoke; commit `feat: add official gigaam ctc backend`. Result: TBD.
+
+### - [ ] N5 GigaAM RNNT official
+DoD: PyTorch row; parity evidence; RU smoke; commit `feat: add official gigaam rnnt backend`. Result: TBD.
+
+### - [ ] N6 Parakeet official
+DoD: official row; EN/RU smoke; timestamps/provenance; commit `feat: add official parakeet backend`. Result: TBD.
+
+### - [ ] N7 Parakeet MLX
+DoD: MLX row; EN/RU smoke; parity vs N6; commit `feat: add parakeet mlx backend`. Result: TBD.
+
+### - [ ] N8 Parakeet sherpa-onnx
+DoD: sherpa row; EN/RU smoke; parity vs N6; commit `feat: add parakeet sherpa onnx backend`. Result: TBD.
+
+### - [ ] N9 Qwen3-ASR official
+DoD: S6 details applied; EN/RU smoke; memory fit; commit `feat: add official qwen3 asr backend`. Result: TBD.
+
+### - [ ] N10 Qwen3-ASR MLX
+DoD: S6 details applied; EN/RU smoke; parity; commit `feat: add qwen3 asr mlx backend`. Result: TBD.
+
+### - [ ] N11 Canary official
+DoD: S7 details applied; EN/RU smoke; memory fit; commit `feat: add official canary backend`. Result: TBD.
+
+### - [ ] N12 Canary MLX
+DoD: S7 details applied; EN/RU smoke; parity; commit `feat: add canary mlx backend`. Result: TBD.
+
+### - [ ] N13 Vosk small RU
+DoD: CPU RU smoke; timestamps/memory/footprint; commit `feat: add vosk small ru backend`. Result: TBD.
+
+### - [ ] N14 Vosk full RU
+DoD: CPU RU smoke; comparison with N13; commit `feat: add vosk full ru backend`. Result: TBD.
+
+## M5: Operations and Documentation
+
+### - [ ] C1 Add `stt-benchmark doctor`
+DoD: RED volume/cache/dependency/hardware tests; no downloads; actionable output; commit `feat: add benchmark doctor command`. Result: TBD.
+
+### - [ ] C2 Add `stt-benchmark models`
+DoD: RED inventory tests; read-only `/Volumes/512GB/hf`; repo/revision/size status; commit `feat: add model inventory command`. Result: TBD.
+
+### - [ ] C3 CI without model downloads
+DoD: clean-runner unit/contract green; optional Apple Silicon job documented; commit `ci: test benchmark without model downloads`. Result: TBD.
+
+### - [ ] D1 Document methodology
+DoD: `docs/methodology.md` covers corpus, normalizer, timings, metrics, limits and views; README link; commit `docs: document benchmark methodology`. Result: TBD.
+
+### - [ ] D2 Document result schema
+DoD: `docs/result-schema.md` covers fields, units, nullability, enums and example; commit `docs: document benchmark result schema`. Result: TBD.
+
+### - [ ] D3 Document model/runtime inventory
+DoD: `docs/models.md` lists IDs, revisions, licenses, variants, precision, languages and limits; commit `docs: document benchmark models`. Result: TBD.
+
+### - [ ] D4 Document architecture
+DoD: `docs/architecture.md` reflects implemented lifecycle, cache and data flow; commit `docs: document benchmark architecture`. Result: TBD.
+
+### - [ ] D5 Update README
+DoD: setup, cache env, single CLI, profiles, breaking notice and troubleshooting; commit `docs: update benchmark usage`. Result: TBD.
+
+### - [ ] R1 Release acceptance
+
+DoD: full suite green; ready backends smoke green; standard JSON/report valid;
+no downloads; clean worktree; RAID current; blockers in release notes; commit
+`chore: prepare benchmark release`.
+
+Result: TBD.
+
+## Next Action
+
+1. Commit this file as `docs: add benchmark improvement tasks`.
+2. Record commit hash in Change Log on T0.1 commit.
+3. Execute T0.1, then T0.2, then T0.3.
+4. Wait for user confirmation of U1.
+5. Execute S1 and stop at plan update gate.
