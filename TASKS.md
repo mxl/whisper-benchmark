@@ -56,7 +56,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 
 | Дата | Task | Изменение | Причина/evidence | Commit |
 |---|---|---|---|---|
-| 2026-07-26 | PLAN | Initial approved plan | User-approved scope | pending |
+| 2026-07-26 | PLAN | Initial approved plan | User-approved scope | 49bad00 |
 
 ## Decision Log
 
@@ -92,9 +92,9 @@ Critical path:
 
 ## M0: Current Worktree
 
-### - [ ] T0.1 Insanely Fast Whisper fix
+### - [x] T0.1 Insanely Fast Whisper fix
 
-Status: READY. Owner: agent. Priority: P0.
+Status: DONE. Owner: agent. Priority: P0.
 
 RED: test requires `return_timestamps=True` and rejects
 `condition_on_prev_tokens`.
@@ -105,7 +105,11 @@ DoD: targeted test proves regression; full unittest and `git diff --check`
 pass; unrelated files excluded; result recorded; commit
 `fix: update insanely-fast-whisper invocation`.
 
-Result: TBD.
+Result: 2026-07-26. Existing uncommitted implementation was verified rather
+than recreated. Targeted regression test passed (1 test), full suite passed
+(39 tests), and `git diff --check` reported no errors. Diff is limited to
+`benchmark_whisper.py` and `test_benchmark.py`. Commit subject:
+`fix: update insanely-fast-whisper invocation`; hash will be recorded by T0.2.
 
 ### - [ ] T0.2 Direct Hugging Face dependency
 

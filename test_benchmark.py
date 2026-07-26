@@ -691,7 +691,9 @@ class BackendInvocationTests(unittest.TestCase):
         _, kwargs = transcribe_audio.call_args
         self.assertNotIn("beam_size", kwargs)
 
-    def test_insanely_fast_whisper_does_not_request_timestamps(self) -> None:
+    def test_insanely_fast_whisper_requests_timestamps_without_condition_on_prev_tokens(
+        self,
+    ) -> None:
         args = argparse.Namespace(
             language="en",
             task="transcribe",
@@ -721,7 +723,6 @@ class BackendInvocationTests(unittest.TestCase):
                     "generate_kwargs": {
                         "task": "transcribe",
                         "language": "en",
-                        "condition_on_prev_tokens": True,
                     },
                 },
                 load_seconds=0.5,
@@ -730,8 +731,12 @@ class BackendInvocationTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(len(pipe_calls), 1)
         self.assertEqual(pipe_calls[0]["audio"], "audio.mp3")
-        self.assertNotIn("return_timestamps", pipe_calls[0])
+        self.assertEqual(pipe_calls[0]["return_timestamps"], True)
         self.assertEqual(pipe_calls[0]["return_language"], True)
+        self.assertEqual(
+            pipe_calls[0]["generate_kwargs"],
+            {"task": "transcribe", "language": "en"},
+        )
 
 
 class DownloadModelsCliTests(unittest.TestCase):
