@@ -58,6 +58,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 |---|---|---|---|---|
 | 2026-07-26 | PLAN | Initial approved plan | User-approved scope | 49bad00 |
 | 2026-07-26 | PLAN | Add Parakeet FP32 via onnx-asr | Separate unquantized ONNX runtime requested; repo contains FP32 and INT8 variants | pending |
+| 2026-07-26 | PLAN | Add direct sherpa-onnx Parakeet FP32 repo | Verified separate encoder/decoder/joiner FP32 artifacts on Hugging Face | pending |
 
 ## Decision Log
 
@@ -208,6 +209,39 @@ are recorded; agent commits `docs: record parakeet onnx cache readiness`.
 
 Result: waiting for user confirmation.
 
+### - [ ] U3 Parakeet Sherpa-ONNX FP32 available in `/Volumes/512GB/hf`
+
+Status: READY. Owner: user. Priority: P0.
+
+Verified repo: `Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp32`, revision
+`2ed28fb1c13002afd5d0756be4d3cbe9be5170e5`. Agent must not run this
+command. Download direct model files, not the duplicate compressed archive:
+
+```bash
+hf download Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp32 \
+  --revision "2ed28fb1c13002afd5d0756be4d3cbe9be5170e5" \
+  --include "README.md" \
+  --include "SHA256SUMS" \
+  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/bpe.vocab" \
+  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/decoder.onnx" \
+  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/encoder.onnx" \
+  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/encoder.weights" \
+  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/joiner.onnx" \
+  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/tokens.txt" \
+  --cache-dir "/Volumes/512GB/hf"
+```
+
+Expected followed sizes: encoder weights 2,435,420,160 bytes, encoder graph
+41,838,346 bytes, decoder 47,233,744 bytes, joiner 25,286,331 bytes. The
+2,421,191,352-byte `.tar.bz2` is intentionally excluded to avoid storing the
+same model twice.
+
+DoD: user confirms download; exact revision and SHA256 files are present;
+model directory contains separate encoder/decoder/joiner files; agent records
+evidence and commits `docs: record parakeet sherpa fp32 cache readiness`.
+
+Result: waiting for user confirmation.
+
 ## M1: Spikes
 
 Spike statuses: `ready`, `blocked` with unblock task, or `unsupported` with
@@ -289,7 +323,7 @@ Result: TBD.
 
 ### - [ ] S4 Parakeet runtimes
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, S1.
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, U3, S1.
 
 Probe official, MLX, sherpa-onnx and onnx-asr FP32 on same EN/RU samples.
 Compare API, precision, transcripts, timestamps, load, RTFx, RAM and cleanup.
@@ -479,7 +513,11 @@ DoD: official row; EN/RU smoke; timestamps/provenance; commit `feat: add officia
 DoD: MLX row; EN/RU smoke; parity vs N6; commit `feat: add parakeet mlx backend`. Result: TBD.
 
 ### - [ ] N8 Parakeet sherpa-onnx
-DoD: sherpa row; EN/RU smoke; parity vs N6; commit `feat: add parakeet sherpa onnx backend`. Result: TBD.
+DoD: sherpa row uses
+`Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp32` revision `2ed28fb...`;
+precision is FP32; separate encoder/decoder/joiner layout validated; EN/RU
+smoke and parity vs N6 recorded; commit
+`feat: add parakeet sherpa onnx backend`. Result: TBD.
 
 ### - [ ] N8.1 Parakeet ONNX-ASR FP32
 DoD: `runtime=onnx-asr`, `precision=fp32`; only unsuffixed ONNX files are
