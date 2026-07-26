@@ -23,3 +23,7 @@ samples/*.part
 
 # Local-only samples
 samples/local/
+
+# Local benchmark models and agent state
+models/
+.opencode/

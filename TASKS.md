@@ -123,11 +123,11 @@ Result: 2026-07-26. `uv sync` resolved 159 packages and rebuilt the editable
 project successfully. Full suite passed (39 tests), and `git diff --check`
 reported no errors. `huggingface-hub>=1.10.1` is present in both
 `pyproject.toml` and `uv.lock`. Commit subject:
-`build: declare huggingface-hub dependency`; hash will be recorded by T0.3.
+`build: declare huggingface-hub dependency`; commit `32d1dbd`.
 
-### - [ ] T0.3 Ignore local state
+### - [x] T0.3 Ignore local state
 
-Status: READY. Owner: agent. Priority: P0. Depends on: T0.2.
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.2.
 
 RED: `.opencode/` and `models/` appear in status.
 
@@ -136,7 +136,10 @@ GREEN: ignore both without deleting local files.
 DoD: status no longer lists them; result recorded; commit
 `chore: ignore local benchmark state`.
 
-Result: TBD.
+Result: 2026-07-26. Added `.opencode/` and `models/` to `.gitignore` without
+deleting either directory. `git status` no longer lists local state. Commit
+subject: `chore: ignore local benchmark state`; hash will be recorded in the
+next completed task.
 
 ## User Prerequisite
 
