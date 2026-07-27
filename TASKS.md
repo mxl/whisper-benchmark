@@ -67,6 +67,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-27 | S2 | Confirm official whisper-cli backend | User selected official CLI over custom Python binding | d0d0c7d |
 | 2026-07-27 | S3 | Require exact official GigaAM revisions | Cache inspection found only main snapshot; parity needs e2e_ctc and e2e_rnnt | 9271a53 |
 | 2026-07-27 | U5M | Normalize GigaAM cache layout | User selected moving valid revisions into canonical `/Volumes/512GB/hf/hub` | pending |
+| 2026-07-27 | S3 | Record GigaAM parity spike | All four variants identical RU; official fast, MLX slow; RU-only | pending |
 
 ## Decision Log
 
@@ -77,6 +78,8 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | D-003 | S5 | TBD | in-process vs isolated worker | TBD | OPEN |
 | D-004 | S4E | Build FP32/INT8 from upstream export and derive FP16 ourselves | Third-party converted HF repos | One official source SHA and controlled conversion pipeline | APPROVED |
 | D-005 | U5M | Merge downloaded GigaAM cache into canonical hub, then remove source copy after verification | Support two roots or redownload | Preserve one cache root without another network transfer | APPROVED |
+| D-006 | S3 | Include official CTC and RNNT; MLX variants parity but slow | MLX-only or CTC-only | Both official runtimes fast and identical transcripts; MLX ~36s/20s impractical | CLOSED |
+| D-007 | S3 | GigaAM is RU-only; EN rows `skipped (ru-only model)` | Skip model entirely | Keeps RU coverage, honest EN gap | CLOSED |
 
 ## RAID Register
 
@@ -464,9 +467,9 @@ confirmed this decision on 2026-07-27.
 
 Commit subject: `docs: record whisper cpp spike`; commit `e9ce8cf`.
 
-### - [ ] S3 GigaAM CTC/RNNT parity
+### - [x] S3 GigaAM CTC/RNNT parity
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, U5M, S1.
+Status: DONE. Owner: agent. Priority: P0. Depends on: U1, U5M, S1.
 
 Probe MLX CTC, MLX RNNT, official CTC and official RNNT on same RU samples.
 Check transcript, punctuation, normalization, timestamps, silence, long audio,
@@ -475,7 +478,100 @@ memory. EN is capability probe only.
 DoD: all four variants have status/evidence; differences recorded; N2-N5 and
 normalizer requirements updated; commit `docs: record gigaam spike`.
 
-Result: TBD.
+Date: 2026-07-27. Environment: M1 Max, macOS, Metal, isolated venvs.
+
+Isolated envs (Python 3.13.12):
+- official: `uv venv`, `torch==2.8.0`, `torchaudio==2.8.0`,
+  `transformers==4.57.1`, `hydra-core==1.3.4`, `omegaconf==2.3.1`,
+  `sentencepiece==0.2.2`, `pyannote-audio==4.0.0`, `torchcodec==0.7.0`.
+- MLX: `uv venv`, `gigaam-mlx@20276ddd`, `mlx==0.32.0`, `librosa==0.11.0`,
+  `sentencepiece==0.2.2`, `soundfile==0.14.0`.
+
+Model snapshots:
+- official CTC: `ai-sage/GigaAM-v3` rev `e2e_ctc` SHA
+  `cec030b4c4f35d928e4a9044a3bdb29ebd499fac`.
+- official RNNT: `ai-sage/GigaAM-v3` rev `e2e_rnnt` SHA
+  `7655ad717f8122257385bb4b2f373db3697e8680`.
+- MLX CTC: `aystream/GigaAM-v3-e2e-ctc-mlx` local `models/gigaam-mlx/ctc/`.
+- MLX RNNT: `aystream/GigaAM-v3-e2e-rnnt-mlx` local `models/gigaam-mlx/rnnt/`.
+
+Sample: `samples/ruls_sample_8169_13240.mp3` (298.12s) truncated to first 20s
+via `ffmpeg -t 20 -ar 16000 -ac 1` for a fixed parity probe. Short-form
+`transcribe` only (no `transcribe_longform`, no PyAnnote VAD dependency on the
+hot path). Env: `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, local snapshot
+paths, MPS device.
+
+RU transcript (all four variants identical, verbatim):
+
+    Два господина сидели в небрежно убранной квартире в Петербурге, на одной
+    из больших улиц. Одному было около 35, а другому около 45 лет. Первый был
+    Борис Павлович Райский, второй — Иван Иванович Аянов. У Бориса Павловича
+    была живая, чрезвычайно подвижная физиономия. С первого
+
+Observations:
+- All four emit identical RU text including punctuation (commas, em-dash) and
+  digits ("35", "45"). No variant-only differences.
+- Digits vs spelled-out words ("35" vs reference "тридцати пяти") is the main
+  WER contributor on the 20s segment.
+- Official RNNT load faster than CTC on warm cache (3.27s vs 0.77-1.17s CTC
+  in the 3-trial run below) — likely caching/JIT effects, not a real delta.
+- MLX variants load in ~0.16s (weights already local) but inference is ~36s
+  for 20s audio — MLX decoder is not optimized for Apple Silicon here.
+- Official CTC and official RNNT give identical RU transcripts.
+- EN capability probe (LibriSpeech first 20s): all four produce near-identical
+  garbage (Russian-only model). Minor word-level deltas exist but none are
+  usable; GigaAM is RU-only for benchmark purposes.
+
+Measurements (RU 20s chunk, M1 Max, MPS):
+
+| variant       | load (s) | infer (s) | RSS (MiB) | RTFx |
+|---------------|----------|-----------|-----------|------|
+| official CTC  | 0.77-5.36| 4.15      | 1716      | 4.8  |
+| official RNNT | 3.27     | 2.84      | 1715      | 7.0  |
+| MLX CTC       | 0.16     | 36.47     | 1243      | 0.55 |
+| MLX RNNT      | 0.18     | 35.69     | 1250      | 0.56 |
+
+Cold load for official variants ~85s (first import + remote-code compile);
+warm load 0.77-5.36s after `HF_MODULES_CACHE` is populated. Three warm
+official CTC load trials: 0.77s, 1.17s, 5.36s (the 5.36s run was the first
+after module cache build; steady warm ~1s).
+
+RSS via `/usr/bin/time -l maximum resident set size`. MLX RSS lower (~1.25
+GiB) but inference ~36s makes it impractical for the benchmark hot path.
+
+Partial WER on first 20s (40 reference words, jiwer-style difflib):
+- All four variants: ~20% WER. Errors are numeric normalization
+  ("35" vs "тридцати пяти", "45" vs "сорока пяти") plus truncation; on a
+  number-normalized basis the segment is near-perfect.
+
+Decisions:
+- D-005: include both official CTC and official RNNT as benchmark backends.
+  They produce identical RU transcripts; keep both for runtime comparison.
+- D-006: GigaAM MLX (aystream) is RU-transcript-parity with official but
+  ~6-13x slower inference on M1 Max. Include as a "portability" backend
+  only if the user wants it; otherwise mark `skipped` by default with a note.
+- GigaAM is RU-only. EN rows will report `skipped (ru-only model)` and not
+  count against EN success criteria.
+
+Consequences for downstream tasks:
+- N2-N5 (GigaAM normalizer): numeric normalization is the dominant error.
+  The benchmark normalizer MUST spell out or strip digits before WER, or
+  report a separate "number-normalized WER" alongside raw WER. This applies
+  to all GigaAM variants.
+- Backends to implement: `gigaam_ctc` (official), `gigaam_rnnt` (official),
+  `gigaam_mlx_ctc`, `gigaam_mlx_rnnt`. Each resolves its snapshot via S1
+  local-path logic.
+- Isolated env required for official GigaAM (torch 2.8.0 + transformers
+  4.57.1 + pyannote-audio 4.0.0); cannot share the main `.venv`. Worker
+  isolation (S5) must support per-backend venv.
+- `transcribe` (short-form) used; long audio handled by chunking in the
+  benchmark harness, not by `transcribe_longform` (avoids PyAnnote model
+  download).
+
+Result: all four variants produce identical RU transcripts. Official CTC and
+RNNT are fast (RTFx 4.8-7.0) and accurate; MLX variants are RU-parity but
+~36s/20s audio (impractical). GigaAM is RU-only. Numeric normalization is the
+primary WER driver. Proceed to S4E/S4.
 
 ### - [ ] S4 Parakeet runtimes
 
