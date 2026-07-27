@@ -66,6 +66,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-26 | PLAN | Build sherpa-onnx variants from official source | Avoid third-party converted weights; control FP32/FP16/INT8 provenance | 643f133 |
 | 2026-07-27 | S2 | Confirm official whisper-cli backend | User selected official CLI over custom Python binding | d0d0c7d |
 | 2026-07-27 | S3 | Require exact official GigaAM revisions | Cache inspection found only main snapshot; parity needs e2e_ctc and e2e_rnnt | pending |
+| 2026-07-27 | U5M | Normalize GigaAM cache layout | User selected moving valid revisions into canonical `/Volumes/512GB/hf/hub` | pending |
 
 ## Decision Log
 
@@ -75,6 +76,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | D-002 | S2 | Use official whisper-cli subprocess | pywhispercpp in-process binding | CLI is upstream 1.9.1; binding HEAD embeds older whisper.cpp 1.8.4 and changes transcripts | CLOSED |
 | D-003 | S5 | TBD | in-process vs isolated worker | TBD | OPEN |
 | D-004 | S4E | Build FP32/INT8 from upstream export and derive FP16 ourselves | Third-party converted HF repos | One official source SHA and controlled conversion pipeline | APPROVED |
+| D-005 | U5M | Merge downloaded GigaAM cache into canonical hub, then remove source copy after verification | Support two roots or redownload | Preserve one cache root without another network transfer | APPROVED |
 
 ## RAID Register
 
@@ -260,9 +262,9 @@ is required for the benchmark.
 Result: 2026-07-26. Replaced by a reproducible export from the already cached
 official `nvidia/parakeet-tdt-0.6b-v3` source model.
 
-### - [ ] U5 Official GigaAM e2e CTC/RNNT revisions available
+### - [x] U5 Official GigaAM e2e CTC/RNNT revisions downloaded
 
-Status: READY. Owner: user. Priority: P0.
+Status: DONE. Owner: user. Priority: P0.
 
 Cache inspection found only snapshot `ec1dc1...` from `main`. S3 requires the
 exact official model revisions. Agent must not run these commands:
@@ -282,11 +284,45 @@ Expected revision SHAs from Hugging Face metadata:
 - `e2e_ctc`: `cec030b4c4f35d928e4a9044a3bdb29ebd499fac`;
 - `e2e_rnnt`: `7655ad717f8122257385bb4b2f373db3697e8680`.
 
-DoD: user confirms both downloads; refs and snapshots resolve locally; configs
-identify `v3_e2e_ctc` and `v3_e2e_rnnt`; agent records sizes and commits
-`docs: record official gigaam revisions readiness`.
+DoD: user confirms both downloads; source refs and snapshots exist; configs
+identify `v3_e2e_ctc` and `v3_e2e_rnnt`; noncanonical location is recorded and
+handed to U5M.
 
-Result: waiting for user confirmation.
+Result: 2026-07-27. Both expected SHAs are present under the noncanonical root
+`/Volumes/512GB/hf/models--ai-sage--GigaAM-v3`: CTC `cec030b4...` identifies
+`v3_e2e_ctc`; RNNT `7655ad71...` identifies `v3_e2e_rnnt`. The earlier command
+used `--cache-dir /Volumes/512GB/hf`, while canonical model cache is
+`/Volumes/512GB/hf/hub`. User selected migration rather than supporting two
+cache roots or redownloading.
+
+### - [ ] U5M Move GigaAM revisions into canonical hub cache
+
+Status: READY. Owner: agent. Priority: P0. Depends on: U5.
+
+Source:
+`/Volumes/512GB/hf/models--ai-sage--GigaAM-v3/`
+
+Destination:
+`/Volumes/512GB/hf/hub/models--ai-sage--GigaAM-v3/`
+
+Migration procedure:
+
+1. Record source/destination refs, snapshot trees, followed sizes and hashes.
+2. Merge `blobs/`, `snapshots/cec030b4...`, `snapshots/7655ad71...`, and refs
+   `e2e_ctc`/`e2e_rnnt`, preserving symlinks and excluding AppleDouble `._*`.
+3. Resolve both revisions with `snapshot_download(..., cache_dir=.../hub,
+   local_files_only=True)` and verify exact SHAs/config model names.
+4. Compare required file hashes and followed sizes between source and
+   destination.
+5. Remove the noncanonical source repo only after every offline verification
+   passes; leave unrelated root files untouched.
+6. Recheck that canonical `main` snapshot still resolves.
+
+DoD: one canonical repo contains main/e2e_ctc/e2e_rnnt; all three resolve
+offline; source duplicate is removed only after parity checks; no network
+download; evidence recorded; commit `chore: normalize gigaam cache layout`.
+
+Result: pending execution after plan approval.
 
 ## M1: Spikes
 
@@ -412,7 +448,7 @@ Commit subject: `docs: record whisper cpp spike`; commit `e9ce8cf`.
 
 ### - [ ] S3 GigaAM CTC/RNNT parity
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, U5, S1.
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, U5M, S1.
 
 Probe MLX CTC, MLX RNNT, official CTC and official RNNT on same RU samples.
 Check transcript, punctuation, normalization, timestamps, silence, long audio,
