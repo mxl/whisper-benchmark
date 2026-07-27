@@ -65,7 +65,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-26 | PLAN | Benchmark quantized variants | User requested precision/quantization matrix instead of excluding quants | 51fb2a8 |
 | 2026-07-26 | PLAN | Build sherpa-onnx variants from official source | Avoid third-party converted weights; control FP32/FP16/INT8 provenance | 643f133 |
 | 2026-07-27 | S2 | Confirm official whisper-cli backend | User selected official CLI over custom Python binding | d0d0c7d |
-| 2026-07-27 | S3 | Require exact official GigaAM revisions | Cache inspection found only main snapshot; parity needs e2e_ctc and e2e_rnnt | pending |
+| 2026-07-27 | S3 | Require exact official GigaAM revisions | Cache inspection found only main snapshot; parity needs e2e_ctc and e2e_rnnt | 9271a53 |
 | 2026-07-27 | U5M | Normalize GigaAM cache layout | User selected moving valid revisions into canonical `/Volumes/512GB/hf/hub` | pending |
 
 ## Decision Log
@@ -295,9 +295,9 @@ used `--cache-dir /Volumes/512GB/hf`, while canonical model cache is
 `/Volumes/512GB/hf/hub`. User selected migration rather than supporting two
 cache roots or redownloading.
 
-### - [ ] U5M Move GigaAM revisions into canonical hub cache
+### - [x] U5M Move GigaAM revisions into canonical hub cache
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U5.
+Status: DONE. Owner: agent. Priority: P0. Depends on: U5.
 
 Source:
 `/Volumes/512GB/hf/models--ai-sage--GigaAM-v3/`
@@ -322,7 +322,25 @@ DoD: one canonical repo contains main/e2e_ctc/e2e_rnnt; all three resolve
 offline; source duplicate is removed only after parity checks; no network
 download; evidence recorded; commit `chore: normalize gigaam cache layout`.
 
-Result: pending execution after plan approval.
+Result: 2026-07-27. Baseline hashes and followed sizes were recorded for both
+source snapshots. `rsync -a` merged the repo into the canonical hub while
+excluding source AppleDouble files and preserving snapshot symlinks. Offline
+`snapshot_download(..., local_files_only=True)` resolves all three revisions:
+main `ec1dc1f0...`, CTC `cec030b4...`, and RNNT `7655ad71...`.
+
+Destination checks match the source baseline:
+
+- CTC model SHA256 `9801f83e...`, 442,405,251 bytes;
+- CTC tokenizer SHA256 `0b9a1960...`, 240,941 bytes;
+- RNNT model SHA256 `afc6dcba...`, 448,928,167 bytes;
+- RNNT tokenizer SHA256 `828c12c9...`, 255,336 bytes;
+- shared modeling code SHA256 `269be43b...`, 49,135 bytes.
+
+After verification, the noncanonical source repo was moved to macOS Trash.
+`/Volumes/512GB/hf` no longer contains a root-level GigaAM repo, and the
+canonical main/CTC/RNNT revisions still resolve offline. AppleDouble metadata
+created by the external filesystem remains ignorable per S1. Commit subject:
+`chore: normalize gigaam cache layout`; hash will be recorded by S3.
 
 ## M1: Spikes
 
