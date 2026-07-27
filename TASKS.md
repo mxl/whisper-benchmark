@@ -70,7 +70,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | ID | Task | Решение | Альтернативы | Последствия | Status |
 |---|---|---|---|---|---|
 | D-001 | S1 | Resolve exact local snapshot, then pass its path to backend | repo ID passed directly to backend | Prevents downloads and pins SHA; env remains required | CLOSED |
-| D-002 | S2 | TBD | pywhispercpp vs whisper-cli | TBD | OPEN |
+| D-002 | S2 | Use official whisper-cli subprocess | pywhispercpp in-process binding | CLI is upstream 1.9.1; binding HEAD embeds older whisper.cpp 1.8.4 and changes transcripts | CLOSED |
 | D-003 | S5 | TBD | in-process vs isolated worker | TBD | OPEN |
 | D-004 | S4E | Build FP32/INT8 from upstream export and derive FP16 ourselves | Third-party converted HF repos | One official source SHA and controlled conversion pipeline | APPROVED |
 
@@ -246,7 +246,7 @@ four files in snapshot `5359861c739e955e79d9a303bcbc70fb988958b1`.
 Followed sizes: tiny Q5_1 32,152,673 bytes; tiny Q8_0 43,537,433 bytes;
 large-v3-turbo Q5_0 574,041,195 bytes; large-v3-turbo Q8_0 874,188,075
 bytes. Commit subject: `docs: record quantized model cache readiness`; hash
-will be recorded by S2.
+`d7409ad`.
 
 ### - [x] U3 Third-party Parakeet Sherpa artifacts
 
@@ -310,9 +310,9 @@ Result: 2026-07-26.
 
 Commit subject: `docs: record hf cache spike`; hash will be recorded by S2.
 
-### - [ ] S2 Whisper.cpp API and Metal
+### - [x] S2 Whisper.cpp API and Metal
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, U4, S1.
+Status: DONE. Owner: agent. Priority: P0. Depends on: U1, U4, S1.
 
 Probe: tiny FP16, Q5_1 and Q8_0 on one EN/RU sample through pywhispercpp and
 official CLI. Record transcript delta, load, RTFx, RSS and disk size per quant.
@@ -323,7 +323,61 @@ DoD: binding and CLI result or reproducible blocker; commands/versions/metrics;
 integration decision; N1 RED plan updated; D-002 closed; commit
 `docs: record whisper cpp spike`.
 
-Result: TBD.
+Result: 2026-07-26.
+
+Environment and versions:
+
+- MacBook Pro M1 Max, 64 GB unified memory;
+- official Homebrew `whisper-cli` 1.9.1;
+- pywhispercpp HEAD `f3b74543dd2bfd743665d074ffb6bb6d7b2e4382`,
+  package `1.5.1.dev1+gf3b74543d`;
+- pywhispercpp embeds whisper.cpp commit `9386f239...`, release 1.8.4;
+- both runtimes used Metal, Accelerate, 8 threads and beam size 5;
+- models came from snapshot `5359861...`; no downloads occurred.
+
+Probe correction: the first binding run concatenated segment strings without
+spaces and produced invalid WER. It was discarded. The corrected probe joined
+trimmed segments with one space and reran the full matrix.
+
+Corrected tiny-model results:
+
+| Runtime | Quant | Lang | WER | CER | Timed value | RTFx | Max RSS MiB |
+|---|---|---|---:|---:|---:|---:|---:|
+| CLI 1.9.1 | FP16 | EN | 0.0565 | 0.0199 | 6.896 s total | 26.1 | 312.1 |
+| CLI 1.9.1 | FP16 | RU | 0.2550 | 0.0618 | 7.943 s total | 37.5 | 311.2 |
+| CLI 1.9.1 | Q5_1 | EN | 0.0607 | 0.0171 | 5.026 s total | 35.8 | 234.2 |
+| CLI 1.9.1 | Q5_1 | RU | 0.2383 | 0.0558 | 8.124 s total | 36.7 | 254.7 |
+| CLI 1.9.1 | Q8_0 | EN | 0.0649 | 0.0195 | 5.393 s total | 33.3 | 250.8 |
+| CLI 1.9.1 | Q8_0 | RU | 0.2367 | 0.0540 | 7.969 s total | 37.4 | 262.1 |
+| Binding 1.8.4 | FP16 | EN | 0.0607 | 0.0179 | 2.104 s warm | 85.5 | 334.5 |
+| Binding 1.8.4 | FP16 | RU | 0.2667 | 0.0657 | 4.677 s warm | 63.7 | 344.3 |
+| Binding 1.8.4 | Q5_1 | EN | 0.0649 | 0.0187 | 1.943 s warm | 92.5 | 248.6 |
+| Binding 1.8.4 | Q5_1 | RU | 0.2600 | 0.0642 | 4.285 s warm | 69.6 | 289.7 |
+| Binding 1.8.4 | Q8_0 | EN | 0.0586 | 0.0171 | 2.104 s warm | 85.5 | 265.8 |
+| Binding 1.8.4 | Q8_0 | RU | 0.2733 | 0.0657 | 4.573 s warm | 65.2 | 287.5 |
+
+Binding load was 0.116-0.217 s, first inference 1.959-4.875 s, and warm
+inference 1.943-4.677 s after Metal initialization was resident. CLI timing is
+whole-process cold time and cannot be compared directly with binding warm
+timing; S5 must define repeat/isolation policy before final performance claims.
+
+Capabilities verified:
+
+- forced language, auto language and translation are exposed by both;
+- beam search works with size 5;
+- segment timestamps are returned by both; binding uses centisecond units;
+- token timestamps are exposed but not enabled in this offline probe;
+- native VAD and VAD model path are exposed by both, but VAD execution was not
+  tested because no VAD model is in the approved cache prerequisites;
+- Core ML was excluded; Metal was active for every measured runtime.
+
+Decision: production N1 uses official `whisper-cli` subprocess, not
+pywhispercpp. Reasons: current official release, direct upstream provenance,
+native MP3 support, complete CLI capabilities, and no hidden older embedded
+runtime. CLI records cold process time; load-only timing is nullable with an
+explicit unsupported reason. pywhispercpp remains spike evidence only.
+
+Commit subject: `docs: record whisper cpp spike`; hash will be recorded by S3.
 
 ### - [ ] S3 GigaAM CTC/RNNT parity
 
@@ -575,16 +629,20 @@ compute type, EN/RU WER/CER, RTFx and RAM delta vs default recorded; commit
 `feat: add faster whisper quant configs`. Result: TBD.
 
 ### - [ ] N1 Whisper.cpp FP16
-DoD: tiny/turbo mapping; EN/RU smoke; Metal/provenance/timestamps;
-`quantization=none`; commit `feat: add whisper cpp backend`. Result: TBD.
+DoD: official `whisper-cli` subprocess, version probe and local model path;
+tiny/turbo mapping; EN/RU smoke; Metal/provenance/segment timestamps;
+`quantization=none`; cold process time recorded and load-only timing marked
+unsupported; commit `feat: add whisper cpp backend`. Result: TBD.
 
 ### - [ ] N1.1 Whisper.cpp Q5
-DoD: tiny Q5_1 and turbo Q5_0 rows; EN/RU smoke; quant metadata, disk/RAM/RTFx
-and WER/CER delta vs N1; commit `feat: add whisper cpp q5 configs`. Result: TBD.
+DoD: official CLI tiny Q5_1 and turbo Q5_0 rows; EN/RU smoke; quant metadata,
+disk/RAM/RTFx and WER/CER delta vs N1; commit
+`feat: add whisper cpp q5 configs`. Result: TBD.
 
 ### - [ ] N1.2 Whisper.cpp Q8
-DoD: tiny/turbo Q8_0 rows; EN/RU smoke; quant metadata, disk/RAM/RTFx and
-WER/CER delta vs N1; commit `feat: add whisper cpp q8 configs`. Result: TBD.
+DoD: official CLI tiny/turbo Q8_0 rows; EN/RU smoke; quant metadata,
+disk/RAM/RTFx and WER/CER delta vs N1; commit
+`feat: add whisper cpp q8 configs`. Result: TBD.
 
 ### - [ ] N2 GigaAM CTC MLX
 DoD: separate row; RU smoke; provenance/punctuation; commit `feat: add gigaam ctc mlx backend`. Result: TBD.
