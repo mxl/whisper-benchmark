@@ -64,7 +64,8 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-26 | PLAN | Add direct sherpa-onnx Parakeet FP32 repo | Verified separate encoder/decoder/joiner FP32 artifacts on Hugging Face | 5e33374 |
 | 2026-07-26 | PLAN | Benchmark quantized variants | User requested precision/quantization matrix instead of excluding quants | 51fb2a8 |
 | 2026-07-26 | PLAN | Build sherpa-onnx variants from official source | Avoid third-party converted weights; control FP32/FP16/INT8 provenance | 643f133 |
-| 2026-07-27 | S2 | Confirm official whisper-cli backend | User selected official CLI over custom Python binding | pending |
+| 2026-07-27 | S2 | Confirm official whisper-cli backend | User selected official CLI over custom Python binding | d0d0c7d |
+| 2026-07-27 | S3 | Require exact official GigaAM revisions | Cache inspection found only main snapshot; parity needs e2e_ctc and e2e_rnnt | pending |
 
 ## Decision Log
 
@@ -259,6 +260,34 @@ is required for the benchmark.
 Result: 2026-07-26. Replaced by a reproducible export from the already cached
 official `nvidia/parakeet-tdt-0.6b-v3` source model.
 
+### - [ ] U5 Official GigaAM e2e CTC/RNNT revisions available
+
+Status: READY. Owner: user. Priority: P0.
+
+Cache inspection found only snapshot `ec1dc1...` from `main`. S3 requires the
+exact official model revisions. Agent must not run these commands:
+
+```bash
+hf download ai-sage/GigaAM-v3 \
+  --revision "e2e_ctc" \
+  --cache-dir "/Volumes/512GB/hf"
+
+hf download ai-sage/GigaAM-v3 \
+  --revision "e2e_rnnt" \
+  --cache-dir "/Volumes/512GB/hf"
+```
+
+Expected revision SHAs from Hugging Face metadata:
+
+- `e2e_ctc`: `cec030b4c4f35d928e4a9044a3bdb29ebd499fac`;
+- `e2e_rnnt`: `7655ad717f8122257385bb4b2f373db3697e8680`.
+
+DoD: user confirms both downloads; refs and snapshots resolve locally; configs
+identify `v3_e2e_ctc` and `v3_e2e_rnnt`; agent records sizes and commits
+`docs: record official gigaam revisions readiness`.
+
+Result: waiting for user confirmation.
+
 ## M1: Spikes
 
 Spike statuses: `ready`, `blocked` with unblock task, or `unsupported` with
@@ -379,11 +408,11 @@ runtime. CLI records cold process time; load-only timing is nullable with an
 explicit unsupported reason. pywhispercpp remains spike evidence only. User
 confirmed this decision on 2026-07-27.
 
-Commit subject: `docs: record whisper cpp spike`; hash will be recorded by S3.
+Commit subject: `docs: record whisper cpp spike`; commit `e9ce8cf`.
 
 ### - [ ] S3 GigaAM CTC/RNNT parity
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, U5, S1.
 
 Probe MLX CTC, MLX RNNT, official CTC and official RNNT on same RU samples.
 Check transcript, punctuation, normalization, timestamps, silence, long audio,
