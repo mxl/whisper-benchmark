@@ -64,6 +64,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-26 | PLAN | Add direct sherpa-onnx Parakeet FP32 repo | Verified separate encoder/decoder/joiner FP32 artifacts on Hugging Face | 5e33374 |
 | 2026-07-26 | PLAN | Benchmark quantized variants | User requested precision/quantization matrix instead of excluding quants | 51fb2a8 |
 | 2026-07-26 | PLAN | Build sherpa-onnx variants from official source | Avoid third-party converted weights; control FP32/FP16/INT8 provenance | 643f133 |
+| 2026-07-27 | S2 | Confirm official whisper-cli backend | User selected official CLI over custom Python binding | pending |
 
 ## Decision Log
 
@@ -375,7 +376,8 @@ Decision: production N1 uses official `whisper-cli` subprocess, not
 pywhispercpp. Reasons: current official release, direct upstream provenance,
 native MP3 support, complete CLI capabilities, and no hidden older embedded
 runtime. CLI records cold process time; load-only timing is nullable with an
-explicit unsupported reason. pywhispercpp remains spike evidence only.
+explicit unsupported reason. pywhispercpp remains spike evidence only. User
+confirmed this decision on 2026-07-27.
 
 Commit subject: `docs: record whisper cpp spike`; hash will be recorded by S3.
 
