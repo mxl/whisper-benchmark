@@ -60,10 +60,10 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | Дата | Task | Изменение | Причина/evidence | Commit |
 |---|---|---|---|---|
 | 2026-07-26 | PLAN | Initial approved plan | User-approved scope | 49bad00 |
-| 2026-07-26 | PLAN | Add Parakeet FP32 via onnx-asr | Separate unquantized ONNX runtime requested; repo contains FP32 and INT8 variants | pending |
-| 2026-07-26 | PLAN | Add direct sherpa-onnx Parakeet FP32 repo | Verified separate encoder/decoder/joiner FP32 artifacts on Hugging Face | pending |
-| 2026-07-26 | PLAN | Benchmark quantized variants | User requested precision/quantization matrix instead of excluding quants | pending |
-| 2026-07-26 | PLAN | Build sherpa-onnx variants from official source | Avoid third-party converted weights; control FP32/FP16/INT8 provenance | pending |
+| 2026-07-26 | PLAN | Add Parakeet FP32 via onnx-asr | Separate unquantized ONNX runtime requested; repo contains FP32 and INT8 variants | e06ec26 |
+| 2026-07-26 | PLAN | Add direct sherpa-onnx Parakeet FP32 repo | Verified separate encoder/decoder/joiner FP32 artifacts on Hugging Face | 5e33374 |
+| 2026-07-26 | PLAN | Benchmark quantized variants | User requested precision/quantization matrix instead of excluding quants | 51fb2a8 |
+| 2026-07-26 | PLAN | Build sherpa-onnx variants from official source | Avoid third-party converted weights; control FP32/FP16/INT8 provenance | 643f133 |
 
 ## Decision Log
 
@@ -221,9 +221,9 @@ followed file sizes are recorded; agent commits
 
 Result: waiting for user confirmation.
 
-### - [ ] U4 Quantized Whisper.cpp artifacts available in `/Volumes/512GB/hf`
+### - [x] U4 Quantized Whisper.cpp artifacts available in `/Volumes/512GB/hf`
 
-Status: READY. Owner: user. Priority: P0.
+Status: DONE. Owner: user. Priority: P0.
 
 Agent must not run these commands:
 
@@ -241,7 +241,12 @@ Whisper Q5/Q8 files exist; agent commits
 `docs: record quantized model cache readiness`. Parakeet Sherpa variants are
 built by S4E/I7, not downloaded from third-party repos.
 
-Result: waiting for user confirmation.
+Result: 2026-07-26. User confirmed download. Read-only inspection found all
+four files in snapshot `5359861c739e955e79d9a303bcbc70fb988958b1`.
+Followed sizes: tiny Q5_1 32,152,673 bytes; tiny Q8_0 43,537,433 bytes;
+large-v3-turbo Q5_0 574,041,195 bytes; large-v3-turbo Q8_0 874,188,075
+bytes. Commit subject: `docs: record quantized model cache readiness`; hash
+will be recorded by S2.
 
 ### - [x] U3 Third-party Parakeet Sherpa artifacts
 
