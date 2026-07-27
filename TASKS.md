@@ -5,6 +5,8 @@
 Цель: единый локальный offline benchmark для EN/RU STT model/runtime
 комбинаций на Apple Silicon. Результаты должны содержать provenance,
 effective config, accuracy, cold/warm timing, memory и disk footprint.
+Downloaded source models live in `/Volumes/512GB/hf/hub`; reproducibly derived
+artifacts live in `/Volumes/512GB/hf/derived`.
 
 Non-goals:
 
@@ -31,7 +33,7 @@ Non-goals:
 ## Workflow
 
 - Checkbox: `- [ ]` до начала, `- [x]` после завершения.
-- Status: `READY`, `IN_PROGRESS`, `BLOCKED`, `DONE`.
+- Status: `READY`, `IN_PROGRESS`, `BLOCKED`, `DONE`, `SUPERSEDED`.
 - Одновременно выполняется одна agent-задача; U1 может идти параллельно.
 - Production-код нового backend запрещён до связанного spike.
 - Код: `RED -> GREEN -> REFACTOR`; GREEN содержит минимальный код.
@@ -61,6 +63,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-26 | PLAN | Add Parakeet FP32 via onnx-asr | Separate unquantized ONNX runtime requested; repo contains FP32 and INT8 variants | pending |
 | 2026-07-26 | PLAN | Add direct sherpa-onnx Parakeet FP32 repo | Verified separate encoder/decoder/joiner FP32 artifacts on Hugging Face | pending |
 | 2026-07-26 | PLAN | Benchmark quantized variants | User requested precision/quantization matrix instead of excluding quants | pending |
+| 2026-07-26 | PLAN | Build sherpa-onnx variants from official source | Avoid third-party converted weights; control FP32/FP16/INT8 provenance | pending |
 
 ## Decision Log
 
@@ -69,6 +72,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | D-001 | S1 | Resolve exact local snapshot, then pass its path to backend | repo ID passed directly to backend | Prevents downloads and pins SHA; env remains required | CLOSED |
 | D-002 | S2 | TBD | pywhispercpp vs whisper-cli | TBD | OPEN |
 | D-003 | S5 | TBD | in-process vs isolated worker | TBD | OPEN |
+| D-004 | S4E | Build FP32/INT8 from upstream export and derive FP16 ourselves | Third-party converted HF repos | One official source SHA and controlled conversion pipeline | APPROVED |
 
 ## RAID Register
 
@@ -81,19 +85,22 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | Risk | Corpus license/reference errors | High | S8 evidence gate | user+agent | OPEN |
 | Risk | Premature abstractions | Medium | spike-first TDD | agent | OPEN |
 | Dependency | Models downloaded by user | High | U1 gate | user | OPEN |
+| Risk | NeMo export is difficult on macOS/Python 3.13 | High | S4E isolated Linux environment | agent | OPEN |
 
 ## Milestones
 
 - M0 Baseline: PLAN, T0.1-T0.3. Exit: clean worktree, tests green.
-- M1 Research: U1, S1-S8. Exit: evidence/status for every runtime.
+- M1 Research: U1, S1-S8 and S4E. Exit: evidence/status for every runtime and
+  reproducible sherpa-onnx export path.
 - M2 Foundation: I1-I4. Exit: existing backends use one schema/runner.
-- M3 Measurement: I5-I6. Exit: reports and corpus profiles reproducible.
+- M3 Measurement and artifacts: I5-I7. Exit: reports, corpus profiles and
+  derived Sherpa artifacts are reproducible.
 - M4 Rollout: all N* tasks. Exit: every ready model/runtime/quantization
   combination has its own benchmark row.
 - M5 Readiness: C1-C3, D1-D5, R1. Exit: docs, CI, release gate complete.
 
 Critical path:
-`PLAN -> T0 -> U1/S1 -> S2-S5 -> I1 -> I2 -> I3 -> I4 -> I5/I6 -> N* -> C*/D* -> R1`.
+`PLAN -> T0 -> U1/S1 -> S2/S3/S4E -> S4/S5 -> I1 -> I2 -> I3 -> I4 -> I5/I6/I7 -> N* -> C*/D* -> R1`.
 
 ## M0: Current Worktree
 
@@ -214,7 +221,7 @@ followed file sizes are recorded; agent commits
 
 Result: waiting for user confirmation.
 
-### - [ ] U4 Quantized runtime artifacts available in `/Volumes/512GB/hf`
+### - [ ] U4 Quantized Whisper.cpp artifacts available in `/Volumes/512GB/hf`
 
 Status: READY. Owner: user. Priority: P0.
 
@@ -227,61 +234,24 @@ hf download ggerganov/whisper.cpp \
   --include "ggml-large-v3-turbo-q5_0.bin" \
   --include "ggml-large-v3-turbo-q8_0.bin" \
   --cache-dir "/Volumes/512GB/hf"
-
-hf download Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp16 \
-  --include "README.md" \
-  --include "SHA256SUMS" \
-  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp16/*" \
-  --exclude "*.tar.bz2" \
-  --cache-dir "/Volumes/512GB/hf"
-
-hf download Nordln/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8 \
-  --include "README.md" \
-  --include "encoder.int8.onnx" \
-  --include "decoder.int8.onnx" \
-  --include "joiner.int8.onnx" \
-  --include "tokens.txt" \
-  --cache-dir "/Volumes/512GB/hf"
 ```
 
 DoD: user confirms download; exact repo revisions and followed sizes recorded;
-Whisper Q5/Q8 and Parakeet Sherpa FP16/INT8 files exist; archives are not
-duplicated; agent commits `docs: record quantized model cache readiness`.
+Whisper Q5/Q8 files exist; agent commits
+`docs: record quantized model cache readiness`. Parakeet Sherpa variants are
+built by S4E/I7, not downloaded from third-party repos.
 
 Result: waiting for user confirmation.
 
-### - [ ] U3 Parakeet Sherpa-ONNX FP32 available in `/Volumes/512GB/hf`
+### - [x] U3 Third-party Parakeet Sherpa artifacts
 
-Status: READY. Owner: user. Priority: P0.
+Status: SUPERSEDED. Owner: user. Priority: P0.
 
-Verified repo: `Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp32`, revision
-`2ed28fb1c13002afd5d0756be4d3cbe9be5170e5`. Agent must not run this
-command. Download direct model files, not the duplicate compressed archive:
+DoD: superseded by S4E/I7; no Yiivgeny, Nordln, or csukuangfj converted model
+is required for the benchmark.
 
-```bash
-hf download Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp32 \
-  --revision "2ed28fb1c13002afd5d0756be4d3cbe9be5170e5" \
-  --include "README.md" \
-  --include "SHA256SUMS" \
-  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/bpe.vocab" \
-  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/decoder.onnx" \
-  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/encoder.onnx" \
-  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/encoder.weights" \
-  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/joiner.onnx" \
-  --include "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-fp32/tokens.txt" \
-  --cache-dir "/Volumes/512GB/hf"
-```
-
-Expected followed sizes: encoder weights 2,435,420,160 bytes, encoder graph
-41,838,346 bytes, decoder 47,233,744 bytes, joiner 25,286,331 bytes. The
-2,421,191,352-byte `.tar.bz2` is intentionally excluded to avoid storing the
-same model twice.
-
-DoD: user confirms download; exact revision and SHA256 files are present;
-model directory contains separate encoder/decoder/joiner files; agent records
-evidence and commits `docs: record parakeet sherpa fp32 cache readiness`.
-
-Result: waiting for user confirmation.
+Result: 2026-07-26. Replaced by a reproducible export from the already cached
+official `nvidia/parakeet-tdt-0.6b-v3` source model.
 
 ## M1: Spikes
 
@@ -337,7 +307,7 @@ Commit subject: `docs: record hf cache spike`; hash will be recorded by S2.
 
 ### - [ ] S2 Whisper.cpp API and Metal
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, U4, S1.
 
 Probe: tiny FP16, Q5_1 and Q8_0 on one EN/RU sample through pywhispercpp and
 official CLI. Record transcript delta, load, RTFx, RSS and disk size per quant.
@@ -365,7 +335,7 @@ Result: TBD.
 
 ### - [ ] S4 Parakeet runtimes
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, U3, U4, S1.
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, S1, S4E.
 
 Probe official, MLX, sherpa-onnx FP32/FP16/INT8 and onnx-asr FP32/INT8 on the
 same EN/RU samples. Compare API, precision, quantization, transcript delta,
@@ -375,6 +345,35 @@ DoD: every runtime/precision pair has status/evidence; unblock tasks exist
 where needed; N6-N8.4 assertions updated; provider list, peak RAM and quality
 delta against the unquantized runtime baseline are recorded; commit
 `docs: record parakeet runtimes spike`.
+
+Result: TBD.
+
+### - [ ] S4E Sherpa-ONNX Parakeet export pipeline
+
+Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+
+Hypothesis: one pinned official `.nemo` source and one pinned sherpa-onnx export
+script can reproducibly produce FP32 and INT8 artifacts; a controlled second
+stage can produce fully FP16 encoder/decoder/joiner weights while keeping
+public ONNX IO compatible with sherpa-onnx.
+
+Minimal experiment:
+
+- resolve the cached official `.nemo` by exact SHA;
+- pin a sherpa-onnx commit containing
+  `scripts/nemo/parakeet-tdt-0.6b-v3/export_onnx.py`;
+- determine a reproducible isolated Linux/Python/NeMo/Torch environment;
+- export FP32 and dynamic INT8 using upstream code;
+- derive FP16 from FP32 with public IO kept FP32;
+- run `onnx.checker`, inspect initializer dtypes and metadata;
+- smoke-test all three variants with sherpa-onnx on EN/RU;
+- store temporary spike outputs under
+  `/Volumes/512GB/hf/derived/parakeet-tdt-0.6b-v3-sherpa-onnx/spike/`.
+
+DoD: exact source SHA, export commit, environment lock, commands, checksums,
+dtypes, file sizes and smoke results recorded; FP32/FP16/INT8 status assigned;
+I7 and N8/N8.2/N8.3 updated; third-party artifact dependencies removed;
+commit `docs: record parakeet sherpa export spike`.
 
 Result: TBD.
 
@@ -534,6 +533,31 @@ DoD: smoke/standard/extended valid; references verified; tests green; commit
 
 Result: TBD.
 
+### - [ ] I7 Reproducible Parakeet Sherpa artifact builder
+
+Depends on: S4E.
+
+RED: tests validate pinned source revision, pinned exporter revision, required
+outputs, dtype manifest, metadata, checksums and refusal to overwrite a
+different build. No network download is performed by the builder.
+
+GREEN: minimal build command consumes the cached official `.nemo` and writes:
+
+```text
+/Volumes/512GB/hf/derived/parakeet-tdt-0.6b-v3-sherpa-onnx/
+  fp32/
+  fp16/
+  int8/
+  manifest.json
+```
+
+DoD: FP32 comes from upstream export; INT8 uses upstream QUInt8 encoder and
+QInt8 decoder/joiner; FP16 converts all three components and keeps public IO
+compatible; manifest records toolchain and checksums; tests and smoke commands
+green; commit `feat: add parakeet sherpa model builder`.
+
+Result: TBD.
+
 ## M4: New Benchmark Configurations
 
 Each: RED fake contract -> GREEN adapter -> RED cached integration -> GREEN real
@@ -576,20 +600,19 @@ DoD: official row; EN/RU smoke; timestamps/provenance; commit `feat: add officia
 DoD: MLX row; EN/RU smoke; parity vs N6; commit `feat: add parakeet mlx backend`. Result: TBD.
 
 ### - [ ] N8 Parakeet sherpa-onnx
-DoD: sherpa row uses
-`Yiivgeny/parakeet-tdt-0.6b-v3-sherpa-onnx-fp32` revision `2ed28fb...`;
-precision is FP32; separate encoder/decoder/joiner layout validated; EN/RU
-smoke and parity vs N6 recorded; commit
+DoD: sherpa row uses I7 `fp32/` artifacts derived from the pinned official
+NVIDIA source; `quantization=none`; separate encoder/decoder/joiner layout,
+checksums and manifest validated; EN/RU smoke and parity vs N6 recorded; commit
 `feat: add parakeet sherpa onnx backend`. Result: TBD.
 
 ### - [ ] N8.2 Parakeet sherpa-onnx FP16
-DoD: Yiivgeny FP16 repo with all encoder/decoder/joiner weights FP16; EN/RU
-smoke; size/RAM/RTFx and WER/CER delta vs N8; commit
+DoD: I7 `fp16/` artifacts have all encoder/decoder/joiner weights FP16 with
+compatible public IO; EN/RU smoke; size/RAM/RTFx and WER/CER delta vs N8; commit
 `feat: add parakeet sherpa fp16 config`. Result: TBD.
 
 ### - [ ] N8.3 Parakeet sherpa-onnx INT8
-DoD: Nordln INT8 repo; all three components verified INT8; EN/RU smoke;
-size/RAM/RTFx and WER/CER delta vs N8; commit
+DoD: I7 `int8/` artifacts use upstream QUInt8 encoder and QInt8
+decoder/joiner; EN/RU smoke; size/RAM/RTFx and WER/CER delta vs N8; commit
 `feat: add parakeet sherpa int8 config`. Result: TBD.
 
 ### - [ ] N8.1 Parakeet ONNX-ASR FP32
@@ -642,7 +665,9 @@ DoD: `docs/methodology.md` covers corpus, normalizer, timings, metrics, limits a
 DoD: `docs/result-schema.md` covers fields, units, nullability, enums and example; commit `docs: document benchmark result schema`. Result: TBD.
 
 ### - [ ] D3 Document model/runtime inventory
-DoD: `docs/models.md` lists IDs, revisions, licenses, variants, precision, languages and limits; commit `docs: document benchmark models`. Result: TBD.
+DoD: `docs/models.md` lists source IDs/revisions/licenses, derived-artifact
+toolchain and checksums, runtime variants, precision, quantization, languages
+and limits; commit `docs: document benchmark models`. Result: TBD.
 
 ### - [ ] D4 Document architecture
 DoD: `docs/architecture.md` reflects implemented lifecycle, cache and data flow; commit `docs: document benchmark architecture`. Result: TBD.
