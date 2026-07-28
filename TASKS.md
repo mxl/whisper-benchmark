@@ -71,6 +71,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-28 | S5 | Record worker isolation spike | Subprocess for all backends; cold RTFx published; ±15% tolerance; D-003 closed | pending |
 | 2026-07-28 | S4E | Record Parakeet sherpa export spike | FP32+INT8 from official .nemo; FP16 BLOCKED (internal Cast conflicts); third-party repos superseded | pending |
 | 2026-07-28 | S4 | Record Parakeet runtimes spike | 6 runtimes probed (official HF, MLX, sherpa FP32/INT8, onnx-asr FP32/INT8); official HF fastest RTFx 25-32x; INT8 4-15x at 1/4 disk; FP16 BLOCKED | pending |
+| 2026-07-28 | S7 | Record Canary runtimes spike | 2 runtimes probed (official NeMo CPU RTFx 2.07-2.29x, MLX bf16 RTFx 76-101x); 3 mlx-audio patches required; MLX RU greedy decoding unreliable | pending |
 
 ## Decision Log
 
@@ -86,6 +87,8 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | D-008 | S4E | FP16 Parakeet via sherpa-onnx BLOCKED; FP32+INT8 ready | Force FP16 now | FP16 conversion fails at ORT load due to internal Cast conflicts; 6 approaches tried | CLOSED |
 | D-009 | S4 | Six Parakeet rows in benchmark: parakeet_hf, parakeet_mlx, parakeet_sherpa_fp32/int8, parakeet_onnx_asr_fp32/int8 | Fewer runtimes | Maximizes runtime coverage for the same source model; each isolated venv per S5 | CLOSED |
 | D-010 | S4 | official HF reference (fastest, RTFx 25-32x); INT8 variants best quantized (RTFx 4-15x, 639 MiB); MLX portable but slow | Single runtime | Coverage of MPS/CPU/bf16/int8 tradeoffs | CLOSED |
+| D-011 | S7 | Include both canary_nemo (official CPU) and canary_mlx (CogniSoftOrg bf16) rows | Single runtime | Reference quality + fast MLX; MLX RU experimental | CLOSED |
+| D-012 | S7 | Official NeMo is reference; MLX RU unreliable until mlx-audio fixes greedy decoding | Exclude MLX RU | Publish both; MLX RU flagged experimental | CLOSED |
 
 ## RAID Register
 
@@ -944,16 +947,103 @@ DoD: both have metrics/dependencies/status; N9/N10 updated; commit
 
 Result: TBD.
 
-### - [ ] S7 Canary runtimes
+### - [x] S7 Canary runtimes
 
-Status: READY. Owner: agent. Priority: P1. Depends on: U1, S1, S5.
+Status: DONE. Owner: agent. Priority: P1. Depends on: U1, S1, S5.
 
 Probe official NeMo and MLX BF16 on EN/RU.
 
 DoD: parity, memory and stability recorded; N11/N12 or unblock tasks updated;
 commit `docs: record canary spike`.
 
-Result: TBD.
+Date: 2026-07-28. Environment: M1 Max, macOS. CPU for NeMo (MPS unsupported
+for NeMo ops), MPS/MLX for the CogniSoftOrg conversion.
+
+Samples: EN `librispeech_1089_134686.mp3` (179.81s), RU
+`ruls_sample_8169_13240.mp3` (298.12s), converted to 16k mono WAV.
+
+Runtimes probed:
+
+1. **official NeMo** — `nvidia/canary-1b-v2` `.nemo` (snapshot
+   `87bc5265`, 5.9 GiB). `ASRModel.restore_from`, CPU. `transcribe` with
+   `source_lang`/`target_lang`. `nemo-toolkit[asr]` latest, Python 3.11
+   isolated env.
+2. **MLX BF16** — `CogniSoftOrg/canary-1b-v2-mlx-bf16` (snapshot
+   `f86c1588`, 1.96 GiB). `mlx-audio==0.4.3`, `from
+   mlx_audio.stt.utils import load`. bf16. Two local patches required
+   (documented below): SDPA mask dtype cast, n-gram repeat blocker,
+   `max_tokens` default bumped 200→1024.
+
+Measurements (cold load + single inference, M1 Max):
+
+| runtime      | prec | EN load (s) | EN infer (s) | EN RTFx | EN RSS (MiB) | RU load (s) | RU infer (s) | RU RTFx | RU RSS (MiB) |
+|--------------|------|-------------|--------------|---------|--------------|-------------|--------------|---------|--------------|
+| official NeMo | FP32 | 94.09       | 78.60        | 2.29    | 10625        | 88.04       | 144.01       | 2.07    | 10537        |
+| MLX          | bf16 | 0.95        | 2.35         | 76.52   | 2093         | 1.06        | 2.94         | 101.40  | 2123         |
+
+MLX notes:
+- mlx-audio canary inference is ~30-50x faster than NeMo CPU and uses
+  ~1/5 the RSS, but requires local patches (see below).
+- Default `max_tokens=200` truncates long audio. Bumped to 1024.
+- Greedy decoding loops on RU (and some far-field EN); a
+  `no_repeat_ngram_size=3` blocker was added. With it, RU still degrades
+  into garbage after the first ~2 sentences ("свежесть... свет... "
+  repetition of cognates). Without it, RU loops on "не имел никакого
+  отношения" for the full 200 tokens.
+- EN transcript matches official NeMo closely on the first ~200 tokens
+  (truncation point of the unpatched default). The MLX conversion README
+  states it matches the ONNX reference on clean audio; the loops are an
+  inference-code issue, not a weight issue.
+- mlx-audio `mlx.core` version installed lacks `Array.at[...].set()`;
+  n-gram blocker uses `mask.at[b].add(-1e9)` + broadcast add instead.
+
+Official NeMo notes:
+- `restore_from` (not `from_pretrained`) for local `.nemo` paths.
+- Load 88-94s (CPU torch model restore + config init). Inference 78-144s.
+- EN and RU transcripts are full, clean, correctly punctuated and cased.
+  EN covers the entire 179.8s clip; RU covers the entire 298.1s clip.
+- RSS 10.3-10.6 GiB (torch + NeMo + SentencePiece + audio).
+- One non-fatal warning: "Error getting class at
+  nemo.collections.asr.modules.transformer.get_nemo_transformer:
+  Located non-class of type 'function'" — load proceeds normally.
+
+Disk footprint:
+- official NeMo: 5.9 GiB (`.nemo` archive).
+- MLX BF16: 1.96 GiB (`model.safetensors` + `ctc/` model + tokenizer).
+
+Transcript parity:
+- EN: official and MLX agree on the opening sentences ("He hoped there
+  would be stew..."). MLX truncates at default max_tokens; official gives
+  the full text.
+- RU: official gives the full Goncharov passage. MLX gives the first 2
+  sentences correctly then degrades (inference code issue).
+
+Decisions:
+- D-011: include both `canary_nemo` (official, CPU, isolated nemo env) and
+  `canary_mlx` (CogniSoftOrg, MLX bf16, isolated mlx-audio env) rows in
+  the benchmark. MLX row carries a `decoding_patches` provenance field
+  listing the three local patches.
+- D-012: official NeMo is the reference quality and the slowest. MLX is
+  the fastest by RTFx (76-101x) but RU quality is unreliable until
+  mlx-audio fixes greedy decoding. Benchmark publishes both; consumers
+  treat MLX RU rows as experimental.
+
+Consequences:
+- N11/N12: two Canary rows. `canary_nemo` resolves the `.nemo` via local
+  path (S1); runs in the isolated `canary-nemo` venv (Python 3.11,
+  nemo-toolkit[asr]). `canary_mlx` resolves `CogniSoftOrg/...` via S1;
+  runs in the isolated `canary-mlx` venv (Python 3.13, mlx-audio 0.4.3
+  with documented patches).
+- Both runtimes support `source_lang`/`target_lang`; the benchmark passes
+  `src=tgt=<sample lang>` for transcription (no translation).
+- MLX decoding patches are reproducibility-critical; recorded in
+  provenance. A future mlx-audio release removing the mask dtype bug and
+  adding a built-in n-gram blocker supersedes the patches.
+
+Result: both runtimes probed. official NeMo reference quality, RTFx ~2x,
+10.5 GiB RSS. MLX bf16 RTFx 76-101x, 2.1 GiB RSS, but RU greedy decoding
+unreliable (inference-code issue, not weights). Three mlx-audio patches
+required and documented.
 
 ### - [ ] S8 Corpus
 
