@@ -69,6 +69,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-27 | U5M | Normalize GigaAM cache layout | User selected moving valid revisions into canonical `/Volumes/512GB/hf/hub` | pending |
 | 2026-07-27 | S3 | Record GigaAM parity spike | All four variants identical RU; official fast, MLX slow; RU-only | pending |
 | 2026-07-28 | S5 | Record worker isolation spike | Subprocess for all backends; cold RTFx published; ±15% tolerance; D-003 closed | pending |
+| 2026-07-28 | S4E | Record Parakeet sherpa export spike | FP32+INT8 from official .nemo; FP16 BLOCKED (internal Cast conflicts); third-party repos superseded | pending |
 
 ## Decision Log
 
@@ -81,6 +82,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | D-005 | U5M | Merge downloaded GigaAM cache into canonical hub, then remove source copy after verification | Support two roots or redownload | Preserve one cache root without another network transfer | APPROVED |
 | D-006 | S3 | Include official CTC and RNNT; MLX variants parity but slow | MLX-only or CTC-only | Both official runtimes fast and identical transcripts; MLX ~36s/20s impractical | CLOSED |
 | D-007 | S3 | GigaAM is RU-only; EN rows `skipped (ru-only model)` | Skip model entirely | Keeps RU coverage, honest EN gap | CLOSED |
+| D-008 | S4E | FP16 Parakeet via sherpa-onnx BLOCKED; FP32+INT8 ready | Force FP16 now | FP16 conversion fails at ORT load due to internal Cast conflicts; 6 approaches tried | CLOSED |
 
 ## RAID Register
 
@@ -589,9 +591,9 @@ delta against the unquantized runtime baseline are recorded; commit
 
 Result: TBD.
 
-### - [ ] S4E Sherpa-ONNX Parakeet export pipeline
+### - [x] S4E Sherpa-ONNX Parakeet export pipeline
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, S1.
+Status: DONE. Owner: agent. Priority: P0. Depends on: U1, S1.
 
 Hypothesis: one pinned official `.nemo` source and one pinned sherpa-onnx export
 script can reproducibly produce FP32 and INT8 artifacts; a controlled second
@@ -616,7 +618,123 @@ dtypes, file sizes and smoke results recorded; FP32/FP16/INT8 status assigned;
 I7 and N8/N8.2/N8.3 updated; third-party artifact dependencies removed;
 commit `docs: record parakeet sherpa export spike`.
 
-Result: TBD.
+Date: 2026-07-28. Environment: macOS M1 Max, native Python 3.11.15 (Docker
+Desktop OOM'd at 7.75 GiB; native run used 9.7 GiB peak).
+
+Source:
+- `.nemo`: `nvidia/parakeet-tdt-0.6b-v3` snapshot
+  `7c35754d166cca382ad1e53e68b01e7c575f3a1d`, file
+  `parakeet-tdt-0.6b-v3.nemo` (2.3 GiB, POSIX tar with `model_weights.ckpt`
+  2.5 GiB inside).
+- Export script: sherpa-onnx commit
+  `0a03d8546f8136073c210ec895109a0c64f90daa` (master 2026-07-28), file
+  `scripts/nemo/parakeet-tdt-0.6b-v3/export_onnx.py` SHA
+  `2f89e95ff2acb1f7f37da5f0de9197b9ee42776b`.
+
+Isolated env: `uv venv` Python 3.11.15, `nemo_toolkit[asr]==2.7.3`,
+`torch==2.13.0`, `transformers==4.57.6`, `onnx==1.17.0`,
+`onnxruntime==1.17.1`, `kaldi-native-fbank`, `librosa`, `soundfile`,
+`numpy<2`. No CUDA (CPU-only export).
+
+Commands:
+```
+cp -L <nemo-snapshot>/parakeet-tdt-0.6b-v3.nemo <spike-dir>/
+curl export_onnx.py + generate_bpe_vocab.py from sherpa-onnx <commit>
+python3 export_onnx.py   # 310s, 9.7 GiB peak RSS
+```
+
+Artifacts (stored under
+`/Volumes/512GB/hf/derived/parakeet-tdt-0.6b-v3-sherpa-onnx/spike/`):
+
+| file                  | size  | dtype     |
+|-----------------------|-------|-----------|
+| encoder.onnx          | 40 M  | FP32 graph|
+| encoder.weights       | 2.3 G | FP32 external data |
+| decoder.onnx          | 45 M  | FP32      |
+| joiner.onnx           | 24 M  | FP32      |
+| encoder.int8.onnx     | 622 M | INT8 (QUInt8 encoder, QInt8 dec/join) |
+| decoder.int8.onnx     | 11 M  | INT8      |
+| joiner.int8.onnx      | 6.1 M | INT8      |
+| tokens.txt            | 92 K  | 8193 tokens |
+| bpe.vocab             | 115 K | hotword vocab |
+
+FP32 total: 2.4 GiB. INT8 total: 639 MiB. Spike dir 10 GiB (includes `.nemo`
+copy + failed FP16 attempts).
+
+ONNX inspection (FP32):
+- ir_version 8, opset 17.
+- encoder inputs: `audio_signal` (float32, [batch, 128, time]),
+  `length` (int64, [batch]).
+- decoder inputs: `targets` (int32), `target_length` (int32), `states.1`
+  (float32), `onnx::Slice_3` (float32).
+- joiner inputs: `encoder_outputs` (float32, [batch, 1024, T]),
+  `decoder_outputs` (float32, [batch, 640, U]).
+- encoder metadata: vocab_size=8192, normalize_type=per_feature,
+  pred_rnn_layers=2, pred_hidden=640, subsampling_factor=8, feat_dim=128.
+- 612 float32 initializers in encoder, 7 in decoder, 6 in joiner.
+
+Smoke test (sherpa-onnx test_onnx_ref.py via onnxruntime 1.28.0, CPU,
+4 threads, kaldi-native-fbank 128-bin mel):
+
+EN sample (`librispeech_1089_134686.mp3`, 179.81s):
+
+| variant                          | RTF   | transcript |
+|----------------------------------|-------|------------|
+| FP32 encoder + FP32 dec/join     | 0.34  | correct, full text |
+| INT8 encoder + FP32 dec/join     | 0.17  | correct, minor diffs |
+| INT8 all                          | 0.17  | correct, minor diffs |
+
+RU sample (`ruls_sample_8169_13240.mp3`, 298.12s):
+
+| variant                          | RTF   | transcript |
+|----------------------------------|-------|------------|
+| FP32 all                          | 0.36  | correct, full text |
+| INT8 encoder + FP32 dec/join     | 0.23  | correct, minor diffs |
+| INT8 all                          | 0.25  | correct, minor diffs |
+
+INT8 introduces minor word differences ("рог" vs "рот", "одед" vs "одет",
+"сильной просью" vs "сильной проседью") but overall quality is high. RTFx
+(reciprocal of RTF): INT8 ~4-6x, FP32 ~2.8-4x real-time on CPU.
+
+FP16 status: **BLOCKED**.
+
+Attempted 6 conversion approaches — all fail at ONNX Runtime load time:
+1. Naive initializer float32→float16: Conv type mismatch (fp32 input,
+   fp16 weight).
+2. Insert Cast nodes at graph inputs only: Mul type mismatch on internal
+   intermediate.
+3. `onnxconverter_common.float16.convert_float_to_float16(keep_io_types=True)`:
+   Cast node output type mismatch (internal Cast from original export).
+4. Same + `op_block_list=["Conv"]`: Cast output mismatch persists.
+5. Same + `disable_shape_infer=True`: Mul type mismatch.
+6. Same + block Conv/Mul/Where/Expand/Unsqueeze/Sub/Add/Div/Sqrt/Erf/
+   LayerNormalization: Cast mismatch remains.
+
+Root cause: the NeMo-exported encoder has internal Cast nodes (from
+Sub/Where/Expand in the pre-encode conv masking logic) that
+`onnxconverter_common` does not rewrite correctly when IO types are kept
+float32. `onnxruntime.quantization` does not expose `QFloat16` in any
+released version (1.17-1.28).
+
+Decision D-008: **FP16 Parakeet via sherpa-onnx is BLOCKED** for this spike.
+FP32 and INT8 are production-ready. FP16 requires either:
+- a custom graph rewrite that inserts Cast at every internal boundary, or
+- a newer onnxruntime with `QFloat16` support, or
+- a NeMo native FP16 export (not sherpa-onnx).
+Created unblock task I7.1 for FP16 if/when needed.
+
+Consequences:
+- I7: produce FP32 + INT8 artifacts from this spike pipeline. FP16 deferred.
+- N8/N8.2/N8.3: benchmark `parakeet_sherpa_fp32` and
+  `parakeet_sherpa_int8` only. FP16 row = `blocked (FP16 conversion fails)`.
+- Third-party sherpa-onnx HF repos (csukuangfj empty, Nordln, Yiivgeny)
+  SUPERSEDED — we build from official `.nemo` with pinned sherpa-onnx commit.
+- Export pipeline reproducible: Dockerfile + export_onnx.py +
+  generate_bpe_vocab.py + exact commits recorded. Docker Desktop OOM is a
+  known limitation; native Python 3.11 with 9.7 GiB RSS works on M1 Max.
+
+Result: FP32 + INT8 exported and smoke-tested on EN/RU. FP16 BLOCKED
+(internal Cast conflicts). Third-party artifacts superseded.
 
 ### - [x] S5 Worker isolation and memory
 
