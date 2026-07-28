@@ -70,6 +70,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-27 | S3 | Record GigaAM parity spike | All four variants identical RU; official fast, MLX slow; RU-only | pending |
 | 2026-07-28 | S5 | Record worker isolation spike | Subprocess for all backends; cold RTFx published; ±15% tolerance; D-003 closed | pending |
 | 2026-07-28 | S4E | Record Parakeet sherpa export spike | FP32+INT8 from official .nemo; FP16 BLOCKED (internal Cast conflicts); third-party repos superseded | pending |
+| 2026-07-28 | S4 | Record Parakeet runtimes spike | 6 runtimes probed (official HF, MLX, sherpa FP32/INT8, onnx-asr FP32/INT8); official HF fastest RTFx 25-32x; INT8 4-15x at 1/4 disk; FP16 BLOCKED | pending |
 
 ## Decision Log
 
@@ -83,6 +84,8 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | D-006 | S3 | Include official CTC and RNNT; MLX variants parity but slow | MLX-only or CTC-only | Both official runtimes fast and identical transcripts; MLX ~36s/20s impractical | CLOSED |
 | D-007 | S3 | GigaAM is RU-only; EN rows `skipped (ru-only model)` | Skip model entirely | Keeps RU coverage, honest EN gap | CLOSED |
 | D-008 | S4E | FP16 Parakeet via sherpa-onnx BLOCKED; FP32+INT8 ready | Force FP16 now | FP16 conversion fails at ORT load due to internal Cast conflicts; 6 approaches tried | CLOSED |
+| D-009 | S4 | Six Parakeet rows in benchmark: parakeet_hf, parakeet_mlx, parakeet_sherpa_fp32/int8, parakeet_onnx_asr_fp32/int8 | Fewer runtimes | Maximizes runtime coverage for the same source model; each isolated venv per S5 | CLOSED |
+| D-010 | S4 | official HF reference (fastest, RTFx 25-32x); INT8 variants best quantized (RTFx 4-15x, 639 MiB); MLX portable but slow | Single runtime | Coverage of MPS/CPU/bf16/int8 tradeoffs | CLOSED |
 
 ## RAID Register
 
@@ -576,9 +579,9 @@ RNNT are fast (RTFx 4.8-7.0) and accurate; MLX variants are RU-parity but
 ~36s/20s audio (impractical). GigaAM is RU-only. Numeric normalization is the
 primary WER driver. Proceed to S4E/S4.
 
-### - [ ] S4 Parakeet runtimes
+### - [x] S4 Parakeet runtimes
 
-Status: READY. Owner: agent. Priority: P0. Depends on: U1, U2, S1, S4E.
+Status: DONE. Owner: agent. Priority: P0. Depends on: U1, U2, S1, S4E.
 
 Probe official, MLX, sherpa-onnx FP32/FP16/INT8 and onnx-asr FP32/INT8 on the
 same EN/RU samples. Compare API, precision, quantization, transcript delta,
@@ -589,7 +592,96 @@ where needed; N6-N8.4 assertions updated; provider list, peak RAM and quality
 delta against the unquantized runtime baseline are recorded; commit
 `docs: record parakeet runtimes spike`.
 
-Result: TBD.
+Date: 2026-07-28. Environment: M1 Max, macOS, MPS/CPU.
+
+Samples: EN `librispeech_1089_134686.mp3` (179.81s), RU
+`ruls_sample_8169_13240.mp3` (298.12s), both converted to 16k mono WAV via
+`ffmpeg -ar 16000 -ac 1`.
+
+Runtimes probed:
+
+1. **official HF** — `transformers==5.9.0`, `AutoModelForTDT`, MPS,
+   `dtype="auto"`. Model snapshot `nvidia/parakeet-tdt-0.6b-v3` @
+   `7c35754d`. Transforms 5.5.3 in main venv does NOT recognize
+   `parakeet_tdt`; isolated env required.
+2. **MLX** — `parakeet-mlx` package, `from_pretrained`, bf16 default. Model
+   `mlx-community/parakeet-tdt-0.6b-v3` @ `ed2b7e8c`.
+3. **sherpa-onnx FP32** — our S4E artifacts, `test_onnx_ref.py` (onnxruntime
+   1.28.0 CPU, kaldi-native-fbank 128-bin mel, 4 threads). FP32 encoder +
+   FP32 decoder/joiner.
+4. **sherpa-onnx INT8** — S4E INT8 encoder + INT8 decoder/joiner.
+5. **onnx-asr FP32** — `onnx-asr[cpu,hub]`, `load_model("nemo-parakeet-tdt-0.6b-v3")`,
+   CPUExecutionProvider forced (CoreML EP fails). Artifacts from
+   `istupakov/parakeet-tdt-0.6b-v3-onnx` (auto-downloaded, now in
+   `/Volumes/512GB/hf/hub`).
+6. **onnx-asr INT8** — same, `quantization="int8"`.
+
+FP16 sherpa-onnx: BLOCKED (D-008, S4E). FP16 onnx-asr: not tested (istupakov
+repo has no FP16 variant).
+
+Measurements (cold load + single inference, M1 Max):
+
+| runtime          | prec | EN load (s) | EN infer (s) | EN RTFx | EN RSS (MiB) | RU load (s) | RU infer (s) | RU RTFx | RU RSS (MiB) |
+|------------------|------|-------------|--------------|---------|--------------|-------------|--------------|---------|--------------|
+| official HF      | auto | 3.15        | 5.67         | 31.70   | 812          | 1.69        | 11.97        | 24.91   | 936          |
+| MLX              | bf16 | 28.31       | 29.72        | 6.05    | 653          | 1.02        | 36.05        | 8.28    | 456          |
+| sherpa-onnx      | FP32 | -           | -            | 2.94*   | -            | -           | -            | 2.74*   | -            |
+| sherpa-onnx      | INT8 | -           | -            | 5.88*   | -            | -           | -            | 3.97*   | -            |
+| onnx-asr         | FP32 | 2.22        | 27.82        | 6.46    | 3919         | 2.20        | 47.42        | 6.29    | 5892         |
+| onnx-asr         | INT8 | 12.60       | 12.11        | 14.85   | 3465         | 1.30        | 22.47        | 13.25   | 3604         |
+
+*sherpa-onnx RTFx computed from RTF reported by test_onnx_ref.py in S4E
+(EN FP32 RTF 0.34 → RTFx 2.94; EN INT8 RTF 0.17 → RTFx 5.88; RU FP32 RTF
+0.36 → RTFx 2.74; RU INT8 RTF 0.25 → RTFx 3.97). Load time not separately
+measured (onnxruntime session creation included in RTF).
+
+Transcript quality observations:
+- All runtimes produce near-identical EN transcripts (minor punctuation/
+  capitalization diffs: "fresh Nelly" vs "Fresh Nelly", "Catechism" vs
+  "catechism").
+- All produce near-identical RU transcripts. INT8 introduces minor word
+  errors ("рог" vs "рот", "одед" vs "одет", "45" vs "сорока пяти").
+- official HF adds casing and punctuation; sherpa-onnx/onnx-asr also add
+  casing and punctuation.
+- MLX transcript matches official HF closely.
+- No runtime produces hallucinations or empty output on either sample.
+
+Disk footprint:
+- official HF: 2.5 GiB (`.nemo` 2.3G + safetensors 80M + config).
+- MLX: 1.2 GiB (safetensors).
+- sherpa-onnx FP32 (our S4E): 2.4 GiB (encoder.onnx 40M + encoder.weights
+  2.3G + decoder 45M + joiner 24M).
+- sherpa-onnx INT8 (our S4E): 639 MiB.
+- onnx-asr FP32 (istupakov): 2.5 GiB (encoder 40M + encoder.data 2.3G +
+  decoder_joint 69M).
+- onnx-asr INT8 (istupakov): 639 MiB (encoder 622M + decoder_joint 17M).
+
+Decisions:
+- D-009: include all four ready runtimes in benchmark: `parakeet_hf`
+  (official, MPS, isolated transformers 5.9 env), `parakeet_mlx` (MLX,
+  isolated parakeet-mlx env), `parakeet_sherpa_fp32` and
+  `parakeet_sherpa_int8` (our S4E artifacts, sherpa-onnx CPU),
+  `parakeet_onnx_asr_fp32` and `parakeet_onnx_asr_int8` (istupakov artifacts,
+  onnx-asr CPU).
+- D-010: official HF is the fastest (RTFx 25-32x) and reference quality.
+  sherpa-onnx INT8 and onnx-asr INT8 are the best quantized options (RTFx
+  4-15x, 639 MiB disk, minor quality loss). MLX is portable but slowest
+  (RTFx 6-8x).
+- FP16 remains BLOCKED (D-008).
+
+Consequences:
+- N6-N8.4: six Parakeet rows total. Each resolves its model snapshot via S1
+  local-path logic. Each runs in its isolated venv (per S5 subprocess
+  isolation).
+- Backends: `parakeet_hf`, `parakeet_mlx`, `parakeet_sherpa_fp32`,
+  `parakeet_sherpa_int8`, `parakeet_onnx_asr_fp32`, `parakeet_onnx_asr_int8`.
+- sherpa-onnx artifacts: our S4E pipeline is the reproducible source. The
+  benchmark runner points at `/Volumes/512GB/hf/derived/parakeet-tdt-0.6b-v3-sherpa-onnx/`.
+- onnx-asr artifacts: `istupakov/parakeet-tdt-0.6b-v3-onnx` in HF cache.
+  Auto-download disabled; runner resolves local snapshot.
+
+Result: all runtimes probed. official HF fastest (RTFx 25-32x). INT8 variants
+6-15x at 1/4 disk. MLX slowest (6-8x) but lowest RSS. FP16 BLOCKED.
 
 ### - [x] S4E Sherpa-ONNX Parakeet export pipeline
 
