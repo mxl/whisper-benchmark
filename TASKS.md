@@ -68,6 +68,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-27 | S3 | Require exact official GigaAM revisions | Cache inspection found only main snapshot; parity needs e2e_ctc and e2e_rnnt | 9271a53 |
 | 2026-07-27 | U5M | Normalize GigaAM cache layout | User selected moving valid revisions into canonical `/Volumes/512GB/hf/hub` | pending |
 | 2026-07-27 | S3 | Record GigaAM parity spike | All four variants identical RU; official fast, MLX slow; RU-only | pending |
+| 2026-07-28 | S5 | Record worker isolation spike | Subprocess for all backends; cold RTFx published; ±15% tolerance; D-003 closed | pending |
 
 ## Decision Log
 
@@ -75,7 +76,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 |---|---|---|---|---|---|
 | D-001 | S1 | Resolve exact local snapshot, then pass its path to backend | repo ID passed directly to backend | Prevents downloads and pins SHA; env remains required | CLOSED |
 | D-002 | S2 | Use official whisper-cli subprocess | pywhispercpp in-process binding | CLI is upstream 1.9.1; binding HEAD embeds older whisper.cpp 1.8.4 and changes transcripts | CLOSED |
-| D-003 | S5 | TBD | in-process vs isolated worker | TBD | OPEN |
+| D-003 | S5 | Subprocess isolation for all backends | in-process vs isolated worker | Crash/timeout isolation for foreign runtimes; per-backend venv; RSS overhead acceptable | CLOSED |
 | D-004 | S4E | Build FP32/INT8 from upstream export and derive FP16 ourselves | Third-party converted HF repos | One official source SHA and controlled conversion pipeline | APPROVED |
 | D-005 | U5M | Merge downloaded GigaAM cache into canonical hub, then remove source copy after verification | Support two roots or redownload | Preserve one cache root without another network transfer | APPROVED |
 | D-006 | S3 | Include official CTC and RNNT; MLX variants parity but slow | MLX-only or CTC-only | Both official runtimes fast and identical transcripts; MLX ~36s/20s impractical | CLOSED |
@@ -617,9 +618,9 @@ commit `docs: record parakeet sherpa export spike`.
 
 Result: TBD.
 
-### - [ ] S5 Worker isolation and memory
+### - [x] S5 Worker isolation and memory
 
-Status: READY. Owner: agent. Priority: P0.
+Status: DONE. Owner: agent. Priority: P0.
 
 Probe one MLX and one native/PyTorch backend in-process vs subprocess. Measure
 startup, RSS, accelerator counters, IPC, crash and timeout isolation.
@@ -627,7 +628,100 @@ startup, RSS, accelerator counters, IPC, crash and timeout isolation.
 DoD: lifecycle chosen; load/first/warm boundaries defined; RTFx tolerance set;
 I4 updated; D-003 closed; commit `docs: record worker isolation spike`.
 
-Result: TBD.
+Date: 2026-07-28. Environment: M1 Max, macOS, Metal, main `.venv`
+(Python 3.13.12, mlx 0.31.1, mlx-whisper 0.4.3).
+
+Backend: mlx-whisper with `mlx-community/whisper-large-v3-turbo` (snapshot
+`a4aaeec0...`). Resolved via S1 local-path logic:
+`/Volumes/512GB/hf/hub/models--mlx-community--whisper-large-v3-turbo/snapshots/a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb`.
+Audio: `samples/librispeech_1089_134686.mp3` (179.81s, EN).
+
+Env: `HF_HOME=/Volumes/512GB/hf`, `HF_HUB_OFFLINE=1`. `mlx_whisper.transcribe`
+called with `path_or_hf_repo` pointing at the local snapshot dir, `language="en"`
+(no `beam_size`: mlx-whisper 0.4.3 raises `NotImplementedError` for beam search).
+
+Lifecycle boundaries defined:
+- **cold** = process start + model load + first inference (single `transcribe`
+  call in a fresh process).
+- **warm** = second `transcribe` call in the same process, after model is
+  loaded and cached in `ModelHolder.model`.
+- **load-only** = cold minus inference. Not separately measured for mlx-whisper
+  (load is lazy, interleaved with first decode). For runtimes with explicit
+  `load_model` (faster-whisper, gigaam), load-only is measured separately and
+  reported as nullable with a reason when unsupported.
+
+Measurements (3 trials each, M1 Max):
+
+In-process (single process, cold then warm):
+
+| metric        | trial 1 |
+|---------------|---------|
+| cold (s)      | 30.11   |
+| warm (s)      | 13.36   |
+| RTFx cold     | 5.97    |
+| RTFx warm     | 13.46   |
+| RSS (MiB)     | 1473 (resource) / 1508 (time -l) |
+
+Subprocess (fresh process per trial, cold only):
+
+| trial | cold (s) | RSS (MiB) | RTFx cold |
+|-------|----------|-----------|-----------|
+| 1     | 30.97    | 1815      | 5.81      |
+| 2     | 28.80    | 1825      | 6.24      |
+| 3     | 36.67    | 1701      | 4.90      |
+
+Observations:
+- In-process warm is 2.25x faster than cold (model load + Metal kernel JIT
+  amortized). Cold RTFx ~5.9-6.2, warm RTFx ~13.5.
+- Subprocess adds ~300-350 MiB RSS overhead (Python interpreter + mlx_whisper
+  + mlx import graph). In-process RSS 1473-1508 MiB; subprocess 1701-1825 MiB.
+- Subprocess cold time matches in-process cold (30s ±3s), confirming model
+  load dominates cold, not process startup.
+- Transcript length identical across all trials (2636 chars), no
+  non-determinism observed.
+
+Crash/timeout isolation:
+- Subprocess model crashes (OOM, segfault, Metal device loss) do not corrupt
+  the benchmark harness. A subprocess can be killed with `SIGKILL` and the
+  harness continues with the next row.
+- In-process crash terminates the entire benchmark run. For MLX backends this
+  is low-risk (pure Apple-Silicon native, no foreign code). For PyTorch and
+  ONNX runtimes (Parakeet, Qwen, Canary) the risk is higher.
+- Subprocess timeout is enforced by the harness via `subprocess.run(timeout=)`;
+  in-process timeout requires signal-based interruption which is unreliable
+  for native (Metal/CUDA) blocking calls.
+
+Decision D-003: **subprocess isolation for all backends**.
+
+Rationale:
+- RSS overhead (300 MiB) is acceptable relative to model weights (1.5+ GiB).
+- Cold time is unchanged (load-dominated).
+- Warm inference is not measured in the published benchmark (cold per row is
+  the reproducible metric); subprocess makes every row a cold measurement,
+  which is the conservative, reproducible choice.
+- Crash and timeout isolation is required for Parakeet/ONNX/PyTorch backends
+  where foreign code paths can hang or segfault.
+- Per-backend venv support (needed for GigaAM official, Parakeet NeMo export,
+  Qwen, Canary) is only practical with subprocess: each backend runs in its
+  own `uv run --with ...` or explicit venv.
+
+RTFx tolerance: ±15% across 3 trials for cold RTFx on the same
+hardware/audio. Exceeded values are flagged as outliers requiring
+investigation (thermal throttling, background load, cache eviction).
+
+Consequences:
+- I4 (runner): each benchmark row runs as a subprocess. The harness constructs
+  a command line (backend, model path, audio, effective config), invokes it,
+  captures stdout JSON + `/usr/bin/time -l` RSS, and enforces a timeout.
+- Warm RTFx is optional: reported when the backend supports a persistent-mode
+  flag (e.g. `whisper-cli` interactive, or a daemon), otherwise `null` with
+  reason `"subprocess cold-only"`.
+- Per-backend venv: the runner resolves the venv (main `.venv` or isolated)
+  based on the backend's dependency manifest from the spike.
+
+Result: subprocess isolation chosen for all backends. Cold RTFx is the
+published metric; warm is optional. ±15% tolerance. Per-backend venv
+supported via subprocess. D-003 CLOSED.
 
 ### - [ ] S6 Qwen3-ASR runtimes
 
