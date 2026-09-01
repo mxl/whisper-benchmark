@@ -78,6 +78,7 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-08-31 | T0.9 | Complete GigaAM Multilingual integration | Official `large_ctc` path, exact local cache revision, shared offline GigaAM environment, RU/EN one-run results recorded | no commit |
 | 2026-08-31 | T0.10 | Complete Podlodka HF/Transformers subprocess integration | Direct local Transformers worker, exact snapshot/offline contract, RU+EN smoke and profile metrics recorded; pipeline rejected because of TorchCodec/FFmpeg incompatibility | no commit |
 | 2026-09-01 | PLAN | Replace framework-first roadmap with lean benchmark delivery | Prioritize repeated baseline, thin workers, high-value model coverage and a fixed-corpus report; retain I1-I7 only as historical backlog | no commit |
+| 2026-09-01 | L0-L6 | Commit lean critical-path implementation and evidence | Isolated profiles, 254 tests, immutable evidence, current RAID/release state | `4d2ffb1`, `39d24e6`, `4ed7ca7` |
 
 ## Decision Log
 
@@ -1827,8 +1828,8 @@ no downloads; clean worktree; RAID current; blockers in release notes; commit
 
 Result: 254 tests pass, `git diff --check` is clean, published evidence is
 committed, model inference is offline/local-only, and the lean critical path is
-committed in `4d2ffb1` and `39d24e6`. Borealis and Parakeet FP16 remain
-documented non-blocking exclusions.
+committed in `4d2ffb1`, `39d24e6`, and `4ed7ca7`. Borealis and Parakeet FP16
+remain documented non-blocking exclusions.
 
 ## Next Action
 
@@ -1837,4 +1838,5 @@ documented non-blocking exclusions.
 2. Run optional L5 only when same-weights Podlodka MLX, classic Vosk or
    ForcedAligner comparison is explicitly needed.
 3. Push or tag the committed critical-path changes only when explicitly
-   requested. Current implementation/results commits: `4d2ffb1`, `39d24e6`.
+   requested. Current implementation/results/release-state commits: `4d2ffb1`,
+   `39d24e6`, `4ed7ca7`.
