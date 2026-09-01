@@ -104,14 +104,14 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 
 | Type | Item | Impact | Mitigation | Owner | Status |
 |---|---|---|---|---|---|
-| Risk | MLX ports differ from official weights | High | parity spikes | agent | OPEN |
-| Risk | NeMo/Qwen dependency conflicts | High | S5 isolation | agent | OPEN |
+| Risk | MLX ports differ from official weights | High | publish separate runtime rows; do not claim weight parity without evidence | agent | MITIGATED |
+| Risk | NeMo/Qwen dependency conflicts | High | isolated pinned worker environments | agent | CLOSED |
 | Risk | Library ignores external HF cache | High | S1 explicit paths | agent | MITIGATED |
-| Risk | Memory metrics are incomparable | High | S5 methodology | agent | OPEN |
-| Risk | Corpus license/reference errors | High | S8 evidence gate | user+agent | OPEN |
-| Risk | Premature abstractions | Medium | spike-first TDD | agent | OPEN |
-| Dependency | Models downloaded by user | High | U1 gate | user | OPEN |
-| Risk | NeMo export is difficult on macOS/Python 3.13 | High | S4E isolated Linux environment | agent | OPEN |
+| Risk | Memory metrics are incomparable | High | subprocess peak RSS plus explicit MPS/unified-memory caveat | agent | MITIGATED |
+| Risk | Corpus license/reference errors | High | bundled attribution/reference files and committed evidence | user+agent | MITIGATED |
+| Risk | Premature abstractions | Medium | lean roadmap; I1-I7 superseded | agent | CLOSED |
+| Dependency | Models downloaded by user | High | all published rows use local artifacts; Borealis remains optional | user | SATISFIED |
+| Risk | NeMo export is difficult on macOS/Python 3.13 | High | pinned derived FP32/INT8 artifacts; FP16 blocker documented | agent | MITIGATED |
 
 ## Milestones
 
@@ -1813,16 +1813,22 @@ and limits; commit `docs: document benchmark models`. Result: TBD.
 ### - [ ] D4 Document architecture
 DoD: `docs/architecture.md` reflects implemented lifecycle, cache and data flow; commit `docs: document benchmark architecture`. Result: TBD.
 
-### - [ ] D5 Update README
-DoD: setup, cache env, single CLI, profiles, breaking notice and troubleshooting; commit `docs: update benchmark usage`. Result: TBD.
+### - [x] D5 Update README
+DoD: setup, cache env, single CLI, profiles, breaking notice and troubleshooting.
+Result: DONE in `39d24e6`; current profiles and `RESULTS.md` are linked.
 
-### - [ ] R1 Release acceptance
+### - [x] R1 Release acceptance
+
+Status: DONE WITH DOCUMENTED BLOCKERS.
 
 DoD: full suite green; ready backends smoke green; standard JSON/report valid;
 no downloads; clean worktree; RAID current; blockers in release notes; commit
 `chore: prepare benchmark release`.
 
-Result: TBD.
+Result: 254 tests pass, `git diff --check` is clean, published evidence is
+committed, model inference is offline/local-only, and the lean critical path is
+committed in `4d2ffb1` and `39d24e6`. Borealis and Parakeet FP16 remain
+documented non-blocking exclusions.
 
 ## Next Action
 
@@ -1830,6 +1836,5 @@ Result: TBD.
    `Qwen/Qwen3-4B`; Borealis remains blocked until both are local.
 2. Run optional L5 only when same-weights Podlodka MLX, classic Vosk or
    ForcedAligner comparison is explicitly needed.
-3. Commit or release the completed lean critical-path changes only when
-   explicitly requested; the current worktree intentionally remains
-   uncommitted.
+3. Push or tag the committed critical-path changes only when explicitly
+   requested. Current implementation/results commits: `4d2ffb1`, `39d24e6`.
