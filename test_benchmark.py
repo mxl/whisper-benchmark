@@ -3224,9 +3224,20 @@ class BackendInvocationTests(unittest.TestCase):
             captured_kwargs.update(kwargs)
             return {"text": "hello world", "language": "en"}
 
-        with mock.patch(
-            "mlx_audio.stt.generate.generate_transcription",
-            side_effect=fake_generate_transcription,
+        generate_module = types.ModuleType("mlx_audio.stt.generate")
+        generate_module.generate_transcription = fake_generate_transcription
+        stt_module = types.ModuleType("mlx_audio.stt")
+        stt_module.generate = generate_module
+        mlx_audio_module = types.ModuleType("mlx_audio")
+        mlx_audio_module.stt = stt_module
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "mlx_audio": mlx_audio_module,
+                "mlx_audio.stt": stt_module,
+                "mlx_audio.stt.generate": generate_module,
+            },
         ):
             result = benchmark_whisper.run_mlx_audio(
                 audio_path=Path("audio.mp3"),
@@ -3254,10 +3265,10 @@ class BackendInvocationTests(unittest.TestCase):
             audio_duration_seconds=10.0,
         )
 
-        with mock.patch(
-            "mlx_whisper.transcribe",
-            return_value={"text": "hello", "language": "en"},
-        ) as transcribe:
+        mlx_whisper_module = types.ModuleType("mlx_whisper")
+        transcribe = mock.Mock(return_value={"text": "hello", "language": "en"})
+        mlx_whisper_module.transcribe = transcribe
+        with mock.patch.dict(sys.modules, {"mlx_whisper": mlx_whisper_module}):
             result = benchmark_whisper.run_mlx_whisper(
                 audio_path=Path("audio.mp3"),
                 model_name="tiny",
@@ -3284,10 +3295,20 @@ class BackendInvocationTests(unittest.TestCase):
             audio_duration_seconds=10.0,
         )
 
-        with mock.patch(
-            "lightning_whisper_mlx.transcribe.transcribe_audio",
-            return_value={"text": "hello", "language": "en"},
-        ) as transcribe_audio:
+        transcribe_audio = mock.Mock(
+            return_value={"text": "hello", "language": "en"}
+        )
+        transcribe_module = types.ModuleType("lightning_whisper_mlx.transcribe")
+        transcribe_module.transcribe_audio = transcribe_audio
+        lightning_module = types.ModuleType("lightning_whisper_mlx")
+        lightning_module.transcribe = transcribe_module
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "lightning_whisper_mlx": lightning_module,
+                "lightning_whisper_mlx.transcribe": transcribe_module,
+            },
+        ):
             result = benchmark_whisper.run_lightning_whisper_mlx(
                 audio_path=Path("audio.mp3"),
                 model_name="tiny",
