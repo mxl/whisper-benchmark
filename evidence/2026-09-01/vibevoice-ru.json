@@ -1,0 +1,326 @@
+{
+  "metadata": {
+    "profile": "vibevoice",
+    "audios": [
+      {
+        "audio": "/Users/michaelledin/projects/whisper-benchmark/samples/ruls_sample_8169_13240.mp3",
+        "sample_label": "ruls_sample_8169_13240",
+        "reference_transcript": "/Users/michaelledin/projects/whisper-benchmark/samples/ruls_sample_8169_13240.txt",
+        "forced_language": "ru",
+        "audio_duration_seconds": 298.12,
+        "source": "default-language"
+      }
+    ],
+    "models": [
+      "vibevoice-asr-hf"
+    ],
+    "backends": [
+      "vibevoice"
+    ],
+    "benchmark_pairs": [
+      [
+        "vibevoice",
+        "vibevoice-asr-hf"
+      ]
+    ],
+    "runs": 1,
+    "task": "transcribe",
+    "audio_selectors": [
+      "ru"
+    ],
+    "beam_size": 5,
+    "compute_type": "default",
+    "device": "auto",
+    "faster_whisper_vad_filter": true,
+    "condition_on_previous_text": true,
+    "hallucination_silence_threshold": 2.0,
+    "openai_whisper_temperature_fallback": true,
+    "lightning_whisper_mlx_batch_size": 12,
+    "insanely_fast_whisper_device_id": "mps",
+    "insanely_fast_whisper_batch_size": 1,
+    "insanely_fast_whisper_flash": false,
+    "gigaam_python": ".venvs/gigaam/bin/python",
+    "gigaam_model_path": null,
+    "gigaam_model_variant": "e2e_rnnt",
+    "gigaam_offline": true,
+    "gigaam_multilingual_python": ".venvs/gigaam/bin/python",
+    "gigaam_multilingual_model_path": null,
+    "gigaam_multilingual_model_variant": "large_ctc",
+    "gigaam_multilingual_language": null,
+    "gigaam_multilingual_effective_language_hint": "ru",
+    "gigaam_multilingual_supported_languages": [
+      "ru",
+      "en",
+      "kk",
+      "ky",
+      "uz"
+    ],
+    "gigaam_multilingual_offline": true,
+    "gigaam_multilingual_mlx_python": ".venvs/gigaam-multilingual-mlx/bin/python",
+    "gigaam_multilingual_mlx_model_path": null,
+    "gigaam_multilingual_mlx_model_variant": "fp16",
+    "gigaam_multilingual_mlx_model_cache_root": "/Volumes/512GB/hf/hub/models--ai-babai--gigaam-multilingual-mlx",
+    "gigaam_multilingual_mlx_required_model_files": [
+      "config.json",
+      "manifest.json",
+      "model.safetensors"
+    ],
+    "gigaam_multilingual_mlx_chunk_seconds": 20.0,
+    "gigaam_multilingual_mlx_overlap_seconds": 2.0,
+    "gigaam_multilingual_mlx_multilingual": true,
+    "gigaam_multilingual_mlx_supported_languages": [
+      "ru",
+      "en",
+      "kk",
+      "ky",
+      "uz"
+    ],
+    "gigaam_multilingual_mlx_supported_tasks": [
+      "transcribe"
+    ],
+    "gigaam_multilingual_mlx_word_timestamps": true,
+    "gigaam_multilingual_mlx_segment_timestamps": true,
+    "gigaam_multilingual_mlx_supports_condition_on_previous_text": false,
+    "gigaam_multilingual_mlx_supports_hallucination_silence_threshold": false,
+    "gigaam_multilingual_mlx_timestamp_semantics": "approximate greedy-CTC word emission times",
+    "gigaam_multilingual_mlx_device": "subprocess",
+    "gigaam_multilingual_mlx_offline_env": {
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1"
+    },
+    "gigaam_multilingual_mlx_offline": true,
+    "tone_python": ".venvs/t-one/bin/python",
+    "tone_model_path": null,
+    "tone_model_variant": "t-one-greedy",
+    "tone_decoder": "greedy",
+    "tone_streaming": false,
+    "tone_offline": true,
+    "vosk_python": ".venvs/vosk/bin/python",
+    "vosk_model_path": null,
+    "vosk_model_variant": "vosk-ru",
+    "vosk_decoding_method": "modified_beam_search",
+    "vosk_quantization": "fp32",
+    "vosk_streaming": false,
+    "vosk_offline": true,
+    "qwen3_asr_python": ".venv/bin/python",
+    "qwen3_asr_model_path": null,
+    "qwen3_asr_model_variant": "qwen3-asr-0.6b-8bit",
+    "qwen3_asr_language": null,
+    "qwen3_asr_effective_language_hint": "ru",
+    "qwen3_asr_max_tokens": 8192,
+    "qwen3_asr_temperature": 0.0,
+    "qwen3_asr_offline": true,
+    "whisper_cpp_python": "/Users/michaelledin/projects/whisper-benchmark/.venv/bin/python3",
+    "whisper_cpp_executable": "/opt/homebrew/bin/whisper-cli",
+    "whisper_cpp_threads": 8,
+    "whisper_cpp_model_cache_root": "/Volumes/512GB/hf/hub/models--ggerganov--whisper.cpp",
+    "whisper_cpp_model_files": {
+      "whisper-cpp-tiny-fp16": "ggml-tiny.bin",
+      "whisper-cpp-tiny-q5_1": "ggml-tiny-q5_1.bin",
+      "whisper-cpp-tiny-q8_0": "ggml-tiny-q8_0.bin",
+      "whisper-cpp-large-v3-turbo-fp16": "ggml-large-v3-turbo.bin",
+      "whisper-cpp-large-v3-turbo-q5_0": "ggml-large-v3-turbo-q5_0.bin",
+      "whisper-cpp-large-v3-turbo-q8_0": "ggml-large-v3-turbo-q8_0.bin"
+    },
+    "whisper_cpp_model_variants": [
+      "whisper-cpp-tiny-fp16",
+      "whisper-cpp-tiny-q5_1",
+      "whisper-cpp-tiny-q8_0",
+      "whisper-cpp-large-v3-turbo-fp16",
+      "whisper-cpp-large-v3-turbo-q5_0",
+      "whisper-cpp-large-v3-turbo-q8_0"
+    ],
+    "whisper_cpp_multilingual": true,
+    "whisper_cpp_supported_tasks": [
+      "transcribe",
+      "translate"
+    ],
+    "whisper_cpp_segment_timestamps": true,
+    "whisper_cpp_supports_condition_on_previous_text": false,
+    "whisper_cpp_supports_hallucination_silence_threshold": false,
+    "whisper_cpp_device": "subprocess/Metal",
+    "whisper_cpp_capabilities": {
+      "multilingual": true,
+      "tasks": [
+        "transcribe",
+        "translate"
+      ],
+      "segment_timestamps": true,
+      "condition_on_previous_text": false,
+      "hallucination_silence_threshold": false,
+      "device": "subprocess/Metal"
+    },
+    "whisper_cpp_offline": true,
+    "podlodka_python": ".venv/bin/python",
+    "podlodka_model_path": null,
+    "podlodka_model_variant": "whisper-podlodka-turbo",
+    "podlodka_language": null,
+    "podlodka_effective_language_hint": "ru",
+    "podlodka_max_new_tokens": 444,
+    "podlodka_offline": true,
+    "parakeet_hf_python": ".venvs/parakeet-hf/bin/python",
+    "parakeet_hf_model_path": null,
+    "parakeet_hf_model_variant": "parakeet-tdt-0.6b-v3-hf",
+    "parakeet_hf_model_cache_root": "/Volumes/512GB/hf/hub/models--nvidia--parakeet-tdt-0.6b-v3",
+    "parakeet_hf_required_model_files": [
+      "config.json",
+      "model.safetensors",
+      "processor_config.json",
+      "tokenizer.json"
+    ],
+    "parakeet_hf_device": "auto",
+    "parakeet_hf_multilingual": true,
+    "parakeet_hf_supported_tasks": [
+      "transcribe"
+    ],
+    "parakeet_hf_segment_timestamps": true,
+    "parakeet_hf_supports_condition_on_previous_text": false,
+    "parakeet_hf_supports_hallucination_silence_threshold": false,
+    "parakeet_hf_timestamp_semantics": "token timestamps",
+    "parakeet_hf_offline_env": {
+      "HF_HOME": "/Volumes/512GB/hf",
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1"
+    },
+    "parakeet_hf_offline": true,
+    "parakeet_sherpa_python": ".venvs/parakeet-sherpa/bin/python",
+    "parakeet_sherpa_model_path": null,
+    "parakeet_sherpa_default_model_path": "/Volumes/512GB/hf/derived/parakeet-tdt-0.6b-v3-sherpa-onnx/spike",
+    "parakeet_sherpa_model_variants": [
+      "parakeet-tdt-0.6b-v3-sherpa-fp32",
+      "parakeet-tdt-0.6b-v3-sherpa-int8"
+    ],
+    "parakeet_sherpa_model_quantization": {
+      "parakeet-tdt-0.6b-v3-sherpa-fp32": "fp32",
+      "parakeet-tdt-0.6b-v3-sherpa-int8": "int8"
+    },
+    "parakeet_sherpa_required_model_files": {
+      "fp32": [
+        "encoder.onnx",
+        "encoder.weights",
+        "decoder.onnx",
+        "joiner.onnx",
+        "tokens.txt",
+        "bpe.vocab"
+      ],
+      "int8": [
+        "encoder.int8.onnx",
+        "decoder.int8.onnx",
+        "joiner.int8.onnx",
+        "tokens.txt",
+        "bpe.vocab"
+      ]
+    },
+    "parakeet_sherpa_threads": 4,
+    "parakeet_sherpa_multilingual": true,
+    "parakeet_sherpa_supported_tasks": [
+      "transcribe"
+    ],
+    "parakeet_sherpa_segment_timestamps": true,
+    "parakeet_sherpa_supports_condition_on_previous_text": false,
+    "parakeet_sherpa_supports_hallucination_silence_threshold": false,
+    "parakeet_sherpa_timestamp_semantics": "token/frame starts",
+    "parakeet_sherpa_device": "subprocess",
+    "parakeet_sherpa_offline": true,
+    "vibevoice_python": ".venvs/vibevoice/bin/python",
+    "vibevoice_model_path": "/Volumes/512GB/hf/hub/models--microsoft--VibeVoice-ASR-HF/snapshots/f22241c2062b3b25272bf117397e03d73381037a",
+    "vibevoice_model_variant": "vibevoice-asr-hf",
+    "vibevoice_model_cache_root": "/Volumes/512GB/hf/hub/models--microsoft--VibeVoice-ASR-HF",
+    "vibevoice_required_model_files": [
+      "config.json",
+      "model.safetensors.index.json",
+      "tokenizer.json",
+      "processor_config.json",
+      "model-00001-of-00008.safetensors",
+      "model-00002-of-00008.safetensors",
+      "model-00003-of-00008.safetensors",
+      "model-00004-of-00008.safetensors",
+      "model-00005-of-00008.safetensors",
+      "model-00006-of-00008.safetensors",
+      "model-00007-of-00008.safetensors",
+      "model-00008-of-00008.safetensors"
+    ],
+    "vibevoice_device": "auto",
+    "vibevoice_mode": "transcription_only",
+    "vibevoice_acoustic_tokenizer_chunk_size": null,
+    "vibevoice_multilingual": true,
+    "vibevoice_supported_tasks": [
+      "transcribe"
+    ],
+    "vibevoice_segment_timestamps": true,
+    "vibevoice_supports_condition_on_previous_text": false,
+    "vibevoice_timestamp_semantics": "speaker segment offsets",
+    "vibevoice_device_label": "subprocess",
+    "vibevoice_offline_env": {
+      "HF_HOME": "/Volumes/512GB/hf",
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1",
+      "PYTORCH_ENABLE_MPS_FALLBACK": "1"
+    },
+    "vibevoice_offline": true,
+    "worker_timeout_seconds": 1800.0,
+    "warmup": false,
+    "show_full_table": false,
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python_version": "3.13.12 (main, Mar 10 2026, 18:26:32) [Clang 21.1.4 ]"
+  },
+  "skipped": [],
+  "summary": [
+    {
+      "audio": "/Users/michaelledin/projects/whisper-benchmark/samples/ruls_sample_8169_13240.mp3",
+      "sample_label": "ruls_sample_8169_13240",
+      "forced_language": "ru",
+      "audio_duration_seconds": 298.12,
+      "backend": "vibevoice",
+      "model": "vibevoice-asr-hf",
+      "backend_device": "subprocess",
+      "runs": 1,
+      "successful_runs": 1,
+      "failed_runs": 0,
+      "avg_total_seconds": 671.4478390000295,
+      "median_total_seconds": 671.4478390000295,
+      "min_total_seconds": 671.4478390000295,
+      "max_total_seconds": 671.4478390000295,
+      "load_seconds": 248.0102462079958,
+      "avg_transcribe_seconds": 420.9824627499911,
+      "stddev_transcribe_seconds": null,
+      "avg_peak_rss_mb": 791.640625,
+      "avg_rtf": 1.4121241874077255,
+      "avg_wer": 0.06833333333333333,
+      "avg_cer": 0.013766233766233767,
+      "last_detected_language": null,
+      "last_detected_language_probability": null,
+      "last_transcript_chars": 3972,
+      "last_transcript_words": 597,
+      "last_peak_rss_mb": 791.640625,
+      "last_wer": 0.06833333333333333,
+      "last_cer": 0.013766233766233767,
+      "errors": []
+    }
+  ],
+  "runs": [
+    {
+      "audio": "/Users/michaelledin/projects/whisper-benchmark/samples/ruls_sample_8169_13240.mp3",
+      "sample_label": "ruls_sample_8169_13240",
+      "audio_duration_seconds": 298.12,
+      "forced_language": "ru",
+      "backend": "vibevoice",
+      "model": "vibevoice-asr-hf",
+      "backend_device": "subprocess",
+      "run_index": 1,
+      "load_seconds": 248.0102462079958,
+      "transcribe_seconds": 420.9824627499911,
+      "total_seconds": 671.4478390000295,
+      "transcript": "Два господина сидели в небрежно убранной квартире в Петербурге на одной из больших улиц. Одному было около тридцати пяти, а другому около сорока пяти лет. Первый был Борис Павлович Раиский, второй — Иван Иванович Аянов. У Бориса Павловича была жива, чрезвычайно подвижная физиономия. С первого взгляда он казался моложе своих лет. Большой белый лоб блестел свежестью. Глаза менялись, то загорались мыслью, чувством, веселостью, то задымывались мечтательно и тогда казались молодыми, почти юношескими. Иногда же смотрели они зрело, устало, скучно и обличали возраст своего хозяина. Гладкие черные волосы, падли на затылок и на уши, а в висках серебрилось несколько белых волос. Щеки, так же как и лоб, около глаз и рта, сохранили еще молодые цвета, но у висков и около подбородка цвет был изжелтосмуглый. Вообще легко можно было угадать по лицу ту пору жизни, когда совершилась уже борьба молодости с созрелостью, когда человек перешел во вторую половину жизни, когда каждый прожитой опыт, чувство, болезни оставляют след. Только рот его сохранял в неуловимой игре тонких губ и в улыбке молодое, свежее, иногда почти детское выражение. Раиский одет был в домашнее серенькое пальто, сидел с ногами на диване. Иван Иванович был напротив в черном фраке, белой перчатке и шляпе лежали около него на столе. У него лицо отличалось спокойствием или скорее равнодушным ожиданием ко всему, что может около него происходить. Смешленный взгляд, не глупые губы, смуглый желтоватый цвет лица, красиво подстриженные с сильной проседью волосы на голове и бакенбардах. Умеренные движения, сдержанная речь и безукоризненный костюм. Вот его наружный портрет. На лице его можно было прочесть покойную уверенность в себе и понимание других, выглядывшее из глаз. Это был представитель большинства уроженцев универсального Петербурга и вместе то, что называют светским человеком. Он принадлежал Петербургу и свету, и его трудно было бы представить себе где-нибудь в другом городе, кроме Петербурга, и в другой сфере, кроме света, то есть известного высшего слоя петербургского населения, хотя у него есть и служба, и свои дела, но его чаще всего встречаешь в большей части гостинных, утром, с визитами, на обедах, на вечерах, на последних всегда за картами. Он так себе. Не характер, не безхарактерность, не знания, не невежество, не убеждения, не скептицизм. Незнание или отсутствие убеждения обличено у него в форму какого-то легкого поверхностного всеотрицания. Он относился ко всему небрежно, ни перед чем искренне не склоняясь, ничему глубоко не веря и ничему особенно не пристращаясь. Немного насмешлив, скептичен, равнодушен и ровен в сношениях со всеми, не даря никого постоянной и глубокой дружбой, но и не преследуя никого настойчивой враждой. Он родился, учился, вырос и дожил до старости в Петербурге, не выезжая далее Лахты и Арониенбаума с одной, Токсова и Средней Рогатки с другой стороны. От этого в нём отражались, как солнце в капле, весь петербургский мир, вся петербургская практичность, нравы, тон, природа, служба, это вторая петербургская природа, и более ничего. На всякую другую жизнь у него не было никакого взгляда, никаких понятий, кроме тех, какие дают свои и иностранные газеты. Он равнодушно смотрел сорок лет сряду, как с каждой весной отплывали за границу битком набитые пароходы, уезжали внутрь России дилижансы, впоследствии вагоны. Он говорил просто, свободно переходя от предмета к предмету, всегда знал обо всём, что делается в мире, в свете и в городе. Следил за подробностями войны, если была война, узнавал равнодушно о перемене английского или французского министерства, читал последнюю речь в парламенте и во французской палате депутатов, всегда знал о новой пьесе и о том, кого зарезали ночью на выборгской стороне. Знал генеалогию, состояние дел и имений, и скандалезную хронику каждого большого дома столицы. Знал всякую минуту, что делается в администрации, о переменах, повышениях, наградах. Знал и сплетни городские, словом, знал хорошо свой мир.",
+      "transcript_chars": 3972,
+      "transcript_words": 597,
+      "wer": 0.06833333333333333,
+      "cer": 0.013766233766233767,
+      "detected_language": null,
+      "detected_language_probability": null,
+      "status": "ok",
+      "error": null,
+      "peak_rss_mb": 791.640625
+    }
+  ]
+}

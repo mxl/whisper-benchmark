@@ -67,11 +67,17 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | 2026-07-27 | S2 | Confirm official whisper-cli backend | User selected official CLI over custom Python binding | d0d0c7d |
 | 2026-07-27 | S3 | Require exact official GigaAM revisions | Cache inspection found only main snapshot; parity needs e2e_ctc and e2e_rnnt | 9271a53 |
 | 2026-07-27 | U5M | Normalize GigaAM cache layout | User selected moving valid revisions into canonical `/Volumes/512GB/hf/hub` | pending |
-| 2026-07-27 | S3 | Record GigaAM parity spike | All four variants identical RU; official fast, MLX slow; RU-only | pending |
+| 2026-07-27 | S3 | Record GigaAM parity spike | All four GigaAM-v3 variants identical RU; official fast, MLX slow; v3 RU-only | pending |
 | 2026-07-28 | S5 | Record worker isolation spike | Subprocess for all backends; cold RTFx published; ±15% tolerance; D-003 closed | pending |
 | 2026-07-28 | S4E | Record Parakeet sherpa export spike | FP32+INT8 from official .nemo; FP16 BLOCKED (internal Cast conflicts); third-party repos superseded | pending |
 | 2026-07-28 | S4 | Record Parakeet runtimes spike | 6 runtimes probed (official HF, MLX, sherpa FP32/INT8, onnx-asr FP32/INT8); official HF fastest RTFx 25-32x; INT8 4-15x at 1/4 disk; FP16 BLOCKED | pending |
 | 2026-07-28 | S7 | Record Canary runtimes spike | 2 runtimes probed (official NeMo CPU RTFx 2.07-2.29x, MLX bf16 RTFx 76-101x); 3 mlx-audio patches required; MLX RU greedy decoding unreliable | pending |
+| 2026-08-31 | T0.6 | Minimal T-one subprocess integration | Official RU-only T-one worker, local/offline snapshot, main one-run result recorded | no commit |
+| 2026-08-31 | T0.7 | Minimal Vosk-named Zipformer2 ONNX subprocess integration | RU-only sherpa-onnx worker, exact local snapshot, main one-run result recorded | no commit |
+| 2026-08-31 | T0.8 | Minimal Qwen3-ASR MLX subprocess integration | Multilingual 0.6B 8-bit MLX worker, local/offline snapshot, main one-run result recorded | no commit |
+| 2026-08-31 | T0.9 | Complete GigaAM Multilingual integration | Official `large_ctc` path, exact local cache revision, shared offline GigaAM environment, RU/EN one-run results recorded | no commit |
+| 2026-08-31 | T0.10 | Complete Podlodka HF/Transformers subprocess integration | Direct local Transformers worker, exact snapshot/offline contract, RU+EN smoke and profile metrics recorded; pipeline rejected because of TorchCodec/FFmpeg incompatibility | no commit |
+| 2026-09-01 | PLAN | Replace framework-first roadmap with lean benchmark delivery | Prioritize repeated baseline, thin workers, high-value model coverage and a fixed-corpus report; retain I1-I7 only as historical backlog | no commit |
 
 ## Decision Log
 
@@ -83,12 +89,16 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 | D-004 | S4E | Build FP32/INT8 from upstream export and derive FP16 ourselves | Third-party converted HF repos | One official source SHA and controlled conversion pipeline | APPROVED |
 | D-005 | U5M | Merge downloaded GigaAM cache into canonical hub, then remove source copy after verification | Support two roots or redownload | Preserve one cache root without another network transfer | APPROVED |
 | D-006 | S3 | Include official CTC and RNNT; MLX variants parity but slow | MLX-only or CTC-only | Both official runtimes fast and identical transcripts; MLX ~36s/20s impractical | CLOSED |
-| D-007 | S3 | GigaAM is RU-only; EN rows `skipped (ru-only model)` | Skip model entirely | Keeps RU coverage, honest EN gap | CLOSED |
+| D-007 | S3 | Tested GigaAM-v3 variants are RU-only; EN rows `skipped (ru-only model)` | Skip model entirely | Keeps RU coverage, honest EN gap | CLOSED |
 | D-008 | S4E | FP16 Parakeet via sherpa-onnx BLOCKED; FP32+INT8 ready | Force FP16 now | FP16 conversion fails at ORT load due to internal Cast conflicts; 6 approaches tried | CLOSED |
 | D-009 | S4 | Six Parakeet rows in benchmark: parakeet_hf, parakeet_mlx, parakeet_sherpa_fp32/int8, parakeet_onnx_asr_fp32/int8 | Fewer runtimes | Maximizes runtime coverage for the same source model; each isolated venv per S5 | CLOSED |
 | D-010 | S4 | official HF reference (fastest, RTFx 25-32x); INT8 variants best quantized (RTFx 4-15x, 639 MiB); MLX portable but slow | Single runtime | Coverage of MPS/CPU/bf16/int8 tradeoffs | CLOSED |
 | D-011 | S7 | Include both canary_nemo (official CPU) and canary_mlx (CogniSoftOrg bf16) rows | Single runtime | Reference quality + fast MLX; MLX RU experimental | CLOSED |
 | D-012 | S7 | Official NeMo is reference; MLX RU unreliable until mlx-audio fixes greedy decoding | Exclude MLX RU | Publish both; MLX RU flagged experimental | CLOSED |
+| D-013 | T0.9 | Keep GigaAM Multilingual `large_ctc` separate from RU-only GigaAM-v3 and do not apply the v3 language skip | Reuse the `gigaam` v3 row and skip EN/auto | Enables RU/EN/KK/KY/UZ coverage through the official PyTorch path | CLOSED |
+| D-014 | T0.10 | Use direct local `AutoProcessor` + `WhisperForConditionalGeneration` instead of the Transformers ASR pipeline | Standard ASR pipeline | Transformers 5.5.3 imports TorchCodec even for raw audio; direct generation avoids the local FFmpeg 9 incompatibility and keeps the worker offline | CLOSED |
+| D-015 | PLAN | Deliver the benchmark through thin isolated workers and the existing JSON/reporting path | Build I1-I7 framework layers first | Produces useful model comparisons sooner; abstractions are added only after repeated concrete need | APPROVED |
+| D-016 | PLAN | Keep rich ASR and alignment capabilities in separate profiles | Mix diarization/alignment latency into plain ASR rows | VibeVoice rich transcription and ForcedAligner remain measurable without corrupting WER/RTF comparability | APPROVED |
 
 ## RAID Register
 
@@ -105,18 +115,29 @@ green, `TASKS.md` обновлён, задача отмечена, создан 
 
 ## Milestones
 
-- M0 Baseline: PLAN, T0.1-T0.3. Exit: clean worktree, tests green.
-- M1 Research: U1, S1-S8 and S4E. Exit: evidence/status for every runtime and
-  reproducible sherpa-onnx export path.
-- M2 Foundation: I1-I4. Exit: existing backends use one schema/runner.
-- M3 Measurement and artifacts: I5-I7. Exit: reports, corpus profiles and
-  derived Sherpa artifacts are reproducible.
-- M4 Rollout: all N* tasks. Exit: every ready model/runtime/quantization
-  combination has its own benchmark row.
-- M5 Readiness: C1-C3, D1-D5, R1. Exit: docs, CI, release gate complete.
+Historical M0/M1 work established the current workers, cache policy and runtime
+spikes. The active roadmap is now lean-first:
+
+- L0 Current baseline: validate the current worktree and publish repeated
+  `main` and `podlodka` EN/RU results.
+- L1 High-value runtimes: integrate official Whisper.cpp FP16/Q5/Q8.
+- L2 Parakeet: integrate official HF plus Sherpa-ONNX FP32/INT8; FP16 remains
+  blocked and does not hold up the milestone.
+- L3 Small comparisons: add official GigaAM-v3 CTC and Vosk small RU beside the
+  already integrated RNNT and full models.
+- L4 Modern extended models: Qwen3-ASR 1.7B, GigaAM Multilingual MLX,
+  VibeVoice-ASR and Borealis after exact local snapshots are available.
+- L5 Optional parity/alignment: Podlodka MLX, classic Vosk and ForcedAligner in
+  separate profiles only when their specific comparison is required.
+- L6 Report and acceptance: assemble the fixed-corpus report from the existing
+  JSON, document provenance/blockers and run the final offline verification.
 
 Critical path:
-`PLAN -> T0 -> U1/S1 -> S2/S3/S4E -> S4/S5 -> I1 -> I2 -> I3 -> I4 -> I5/I6/I7 -> N* -> C*/D* -> R1`.
+`L0 -> L1 -> L2 -> L3 -> L4 -> L6`. L5 is optional and must not block L6.
+
+The original I1-I7 framework-first tasks remain below as historical backlog.
+They are not on the active critical path and must not be implemented without a
+new concrete requirement.
 
 ## M0: Current Worktree
 
@@ -168,6 +189,299 @@ Result: 2026-07-26. Added `.opencode/` and `models/` to `.gitignore` without
 deleting either directory. `git status` no longer lists local state. Commit
 subject: `chore: ignore local benchmark state`; hash will be recorded in the
 next completed task.
+
+### - [x] T0.4 Benchmark profiles
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.3.
+
+At T0.4 completion, the default `main` profile was a compact Russian STT
+baseline with exactly two pairs on the bundled RU sample: `mlx-whisper` / `large-v3-turbo` and
+`gigaam` / `e2e_rnnt`. The separate `whisper` profile preserves all six
+currently implemented Whisper runtimes and all existing Whisper model sizes
+across both bundled samples.
+
+Explicit `--models` or `--backends` options switch pair generation to the
+Cartesian product of the selected models and backends. `--audio` selects
+samples without changing the exact `main` pairs.
+
+DoD: profile parsing tests, metadata, README usage, and unified CLI help are
+updated without adding unsupported backend names.
+
+Result: 2026-08-31 at T0.4 completion. `main` then executed exactly two RU
+pairs: `mlx-whisper` / `large-v3-turbo` and `gigaam` / `e2e_rnnt`;
+`whisper` preserved the previous all-runtime matrix. T0.6 later added the
+T-one pair and T0.7 later added the Vosk pair; the current four-pair profile is
+recorded in T0.7.
+
+### - [x] T0.5 Minimal GigaAM subprocess integration
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.4, S3, S5, U5M.
+
+Scope: expose only the official RU-only GigaAM-v3 `e2e_rnnt` variant through the
+benchmark's isolated-worker path. This is a minimal integration, not the
+broader unified backend framework and not completion of the other GigaAM
+variants.
+
+Acceptance expectations:
+
+- the setup path creates `.venvs/gigaam` with `uv venv --python 3.13.12` and
+  installs `environments/gigaam/requirements.txt`;
+- the runner resolves an exact local snapshot, starts the isolated GigaAM
+  subprocess, passes offline environment variables, enforces a timeout, and
+  maps its single-JSON protocol into benchmark results;
+- macOS worker executions record peak resident set size as `peak_rss_mb`;
+- the worker rejects non-local paths and does not call official
+  `transcribe_longform`; after the exact too-long error it uses deterministic
+  25-second, zero-overlap local chunks;
+- because this GigaAM-v3 variant is RU-only, the harness checks the resolved input before
+  loading/running it; any input whose `forced_language` is not exactly `ru`
+  (including `auto`) records `SkippedBenchmark` with reason `ru-only model` and
+  produces no GigaAM `RunResult`; the default RU pair remains successful;
+- focused tests cover profile pair selection, pinned local-path resolution,
+  worker errors/timeouts, JSON protocol, and the too-long fallback.
+
+Result: 2026-08-31. The minimal GigaAM-v3 `gigaam` / `e2e_rnnt` path is implemented with
+the default `.venvs/gigaam` interpreter, exact local snapshot resolution,
+offline execution, timeout handling, JSON IPC, and macOS peak-RSS capture.
+The harness now skips GigaAM-v3 before loading/running it for EN and autodetected
+inputs, recording `ru-only model` and emitting no GigaAM-v3 run; the default
+GigaAM-v3 RU pair remains active and successful.
+The official longform path remains intentionally unused because of its gated
+pyannote/HF_TOKEN requirement. No final accuracy, timing, or memory metric
+numbers are asserted here; those remain benchmark-output measurements.
+
+Commit: not created (user requested no commit).
+
+### - [x] T0.6 Minimal T-one subprocess integration
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.4, S5.
+
+Scope: expose only the official RU-only T-one `t-one-greedy` variant through
+an isolated worker subprocess. This is a minimal integration; it does not
+claim broader T-one adapters or a unified backend framework.
+
+Acceptance expectations:
+
+- the setup path creates `.venvs/t-one` with
+  `uv venv --python 3.12 .venvs/t-one` and installs
+  `environments/t-one/requirements.txt`;
+- the worker uses the official GitHub source at commit
+  `3c5b6c015038173840e62cea99e10cdb1c759116`, resolves the exact local
+  `t-tech/T-one` snapshot, and runs offline through `from_local`;
+- inference is CPU-only at 8 kHz, uses greedy decoding by default, returns
+  phrase timestamps, and uses `model.onnx`; `kenlm.bin` is optional for greedy
+  and required for beam decoding;
+- the worker exposes the official streaming path through `streaming`, while
+  the `main` profile uses offline mode;
+- T-one is skipped for EN and `auto` with reason `ru-only model`, without
+  claiming support for other languages or adapters.
+
+Result: 2026-08-31 at T0.6 completion. `main` then executed exactly three RU pairs:
+`mlx-whisper` / `large-v3-turbo`, `gigaam` / `e2e_rnnt`, and `t-one` /
+`t-one-greedy`. The cached T-one `main` snapshot is
+`106f3b0b32a9e107eb613312e4ebc61ff3d53926`.
+
+One sample/one run measured T-one at WER 0.027, CER 0.004, total 101.314 s,
+load 2.645 s, transcription 97.983 s, average peak RSS 537.531 MB, and
+average RTF 0.329. The same run recorded GigaAM at WER 0.052, CER 0.013,
+total 58.166 s, peak RSS 1830.328 MB, and MLX Whisper at WER 0.043, CER
+0.021, total 46.843 s. These are one-sample/one-run observations, not a
+universal ranking.
+
+Commit: not created (user requested no commit).
+
+### - [x] T0.7 Minimal Vosk-named Zipformer2 ONNX subprocess integration
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.4, S5, U1.
+
+Scope: expose only the RU `vosk` / `vosk-ru` pair through an isolated worker.
+This is a minimal integration; it does not claim the classic Vosk Python API,
+other Vosk adapters, or a broader unified backend framework.
+
+Acceptance expectations:
+
+- the setup path creates `.venvs/vosk` with Python 3.13.12 and installs
+  `environments/vosk/requirements.txt`, including exactly
+  `sherpa-onnx==1.13.6`;
+- the worker treats cached `alphacep/vosk-model-ru` as a Zipformer2 ONNX
+  model, resolves an exact local snapshot, and intentionally does not use the
+  classic `vosk` Python API;
+- inference is CPU-only at 16 kHz with float32 audio, uses
+  `modified_beam_search` and FP32 files in `main`, and detects both the full
+  `am-onnx` and small `am` model layouts;
+- full and small layouts use deterministic 20-second, zero-overlap chunks;
+  token/frame start timestamps are returned as absolute audio timestamps;
+- the harness skips Vosk for EN and `auto` with reason `ru-only model`, without
+  claiming support for other languages or adapters; cached
+  `alphacep/vosk-model-small-ru` is supported by layout detection but is not in
+  `main` yet.
+
+Result: 2026-08-31 at T0.7 completion. `main` then executed exactly four RU pairs:
+`mlx-whisper` / `large-v3-turbo`, `gigaam` / `e2e_rnnt`, `t-one` /
+`t-one-greedy`, and `vosk` / `vosk-ru`. The cached big-model snapshot is
+`df6a54a4d8e5d43e82675e4f5dba2d507731a0d1`.
+
+From `/tmp/stt-main-vosk-chunked.json`, one bundled RU sample and one run
+measured Vosk at WER 0.037, CER 0.009, total 15.270 s, load 3.362 s,
+transcription 11.813 s, peak RSS 954.766 MB, and average RTF 0.040. This is a
+sample-specific one-run observation, not a universal ranking.
+
+Commit: not created (user requested no commit).
+
+### - [x] T0.8 Minimal Qwen3-ASR MLX subprocess integration
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.4, S5, U1.
+
+Scope: expose the cached multilingual MLX `qwen3-asr` /
+`qwen3-asr-0.6b-8bit` pair through an isolated worker subprocess. This is a
+minimal MLX integration; it does not claim the 1.7B model, the official
+Hugging Face/Transformers adapter, or completion of the broader S6/N9/N10
+Qwen runtime work.
+
+Acceptance expectations:
+
+- the worker uses the existing main `.venv` with `mlx-audio 0.4.2` and MLX;
+  no new Qwen-specific virtualenv is created;
+- the runner resolves the cached
+  `mlx-community/Qwen3-ASR-0.6B-8bit` `refs/main` to exact snapshot
+  `89e96d92ba34aca20b3e29fb10cc284097d1219f`, passes its local path, and
+  enforces `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`;
+- execution is isolated in a subprocess on Apple Silicon with MLX, supports
+  multilingual RU+EN audio, and returns segment-level rather than word-level
+  timestamps; alignment is not run;
+- `--qwen3-asr-language` takes precedence; without it, a forced bundled
+  sample's concrete language is passed (`ru` for the default main sample),
+  while `auto`/`None` omits the language hint;
+- at T0.8 completion, the `main` profile had exactly five pairs, adding
+  `qwen3-asr` / `qwen3-asr-0.6b-8bit` to the four existing pairs; T0.9 later
+  added the GigaAM Multilingual pair;
+- at T0.8 completion, Transformers-native Qwen3-ASR requiring Transformers
+  `>=5.13` and `ForcedAligner` were deferred/separate.
+
+Result: 2026-08-31. The Qwen3-ASR MLX worker and main-profile pair are
+implemented with local snapshot resolution, offline environment variables,
+subprocess isolation, and the existing main environment. One bundled RU
+sample and one run measured WER 0.112, CER 0.032, total 33.082 s, load
+16.050 s, transcription 16.214 s, peak RSS 1816.891 MB, and average RTF
+0.054. Qwen3-ASR is experimental and this is not a universal ranking; on this
+sample it was worse on WER/CER than T-one, Vosk, GigaAM, and MLX Whisper.
+
+No 1.7B model or official HF/Transformers adapter was implemented in T0.8. The
+later S6/L4 work added both 1.7B runtimes; `ForcedAligner` remains separate.
+
+Commit: not created (user requested no commit).
+
+### - [x] T0.9 GigaAM Multilingual official `large_ctc` integration
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.4, S1, S5, U1.
+
+Scope: add a separate official PyTorch GigaAM Multilingual path; do not fold it
+into the RU-only GigaAM-v3 `e2e_rnnt` integration.
+
+Acceptance expectations:
+
+- use `ai-sage/GigaAM-Multilingual`, revision `large_ctc`, through the official
+  Transformers remote-code/PyTorch path, with CPU or MPS where available;
+- reuse `.venvs/gigaam`; do not create a second GigaAM environment;
+- resolve the canonical local `refs/large_ctc` ref in code, validate the
+  resulting snapshot, pass the exact local path, and set
+  `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`;
+- the current local cache observation is snapshot
+  `3905cd51c3ed4e88c8edf33f3302969ba480a327` under
+  `/Volumes/512GB/hf/hub/models--ai-sage--GigaAM-Multilingual/snapshots/`;
+  this SHA must not be hard-coded instead of resolving the ref;
+- support the model's RU, EN, KK, KY, and UZ language set; EN and `auto` must
+  not be skipped as `ru-only model`;
+- avoid gated `transcribe_longform`; after the exact too-long signal, use
+  deterministic 25-second, zero-overlap local chunks through short-form
+  transcription;
+- run a real offline smoke before marking the task complete, then record actual
+  benchmark metrics. No final Multilingual metrics are asserted in advance.
+
+Result: 2026-08-31. T0.9 is complete. The offline smoke and benchmark runs
+completed successfully. The main profile now has six exact pairs,
+adding `gigaam-multilingual` / `gigaam-multilingual-large-ctc` to the existing
+five. The integration uses the official PyTorch `large_ctc` path in the shared
+`.venvs/gigaam` environment, an offline worker, and runtime resolution of the
+local `refs/large_ctc` ref. The current resolved snapshot is
+`3905cd51c3ed4e88c8edf33f3302969ba480a327`. Long audio uses deterministic
+25-second WAV chunks with zero overlap after the exact too-long signal. The
+multilingual path remains separate from RU-only GigaAM-v3.
+
+The main RU run from `/tmp/stt-main-gigaam-multilingual.json` used one bundled
+sample and one run: WER 0.025, CER 0.005, total 88.597 s, load 28.738 s,
+transcription 59.161 s, peak RSS 2782.062 MB, and average RTF 0.198. The
+focused EN run from `/tmp/stt-gigaam-multilingual-en.json` also used one sample
+and one run: WER 0.061, CER 0.021, total 64.864 s, load 29.202 s,
+transcription 34.905 s, peak RSS 2766.594 MB, and average RTF 0.194.
+
+EN and `auto` are not skipped for this backend; only GigaAM-v3, T-one, and Vosk
+remain RU-only. These metrics are one-sample/one-run observations, not a
+universal ranking, and make no claim that the multilingual model is globally
+best. At T0.9 completion only the official PyTorch `large_ctc` path was
+integrated; L4 later added the separate MLX FP16 comparison.
+
+Commit: not created (user requested no commit).
+
+### - [x] T0.10 Minimal Podlodka HF/Transformers subprocess integration
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.4, S1, S5.
+
+Scope: expose the cached Hugging Face-native
+`bond005/whisper-podlodka-turbo` model through a separate `podlodka` profile.
+Do not add it to the default `main` profile. The model card declares
+Apache-2.0 licensing and RU+EN support; this benchmark scope is ASR only.
+
+Acceptance expectations:
+
+- run direct local Transformers inference in an isolated subprocess using the
+  repository's `.venv/bin/python` by default: `AutoProcessor` plus
+  `WhisperForConditionalGeneration`;
+- resolve `/Volumes/512GB/hf/hub/models--bond005--whisper-podlodka-turbo/refs/main`
+  to its exact local snapshot, pass that directory to the worker, and enforce
+  `HF_HOME=/Volumes/512GB/hf`, `HF_HUB_OFFLINE=1`, and
+  `TRANSFORMERS_OFFLINE=1`;
+- support `--podlodka-python` / `PODLODKA_PYTHON` and
+  `--podlodka-model-path` / `PODLODKA_MODEL_PATH` overrides;
+- provide the separate profile command
+  `uv run stt-benchmark benchmark --profile podlodka`, covering the bundled RU
+  and EN samples without changing `main`;
+- make `--podlodka-language` take precedence. Without it, pass a forced `ru` or
+  `en` selector as the language hint; for `auto` or an unforced input, omit the
+  hint and allow model detection;
+- return deterministic fixed-chunk segment offsets; word-level alignment is not
+  part of this task;
+- explicitly exclude MLX conversion and `whisper-large-v3-ru-podlodka` from
+  this integration;
+- run a real offline RU+EN smoke and benchmark before marking the task done.
+  Record actual metrics only after that run; do not prefill results from the
+  model card or another benchmark.
+
+Result: 2026-08-31. The cached `refs/main` resolved at runtime to snapshot
+`da87efd100d2111281b1672ad6bd386722b32251`. The worker uses direct local
+Transformers classes, `soundfile` float32 audio, 16 kHz resampling when needed,
+and 30-second fixed chunks with chunk-boundary offsets. No pipeline, TorchCodec,
+FFmpeg, MLX conversion, or `whisper-large-v3-ru-podlodka` path is used.
+
+The first direct smoke exposed a model-specific limit: Podlodka has 448 decoder
+target positions and a four-token Whisper prompt, so the default was corrected
+from 448 to 444 `max_new_tokens`. The final isolated RU smoke passed with
+`/tmp/podlodka-ru20-direct-444.json`.
+
+The final repeated offline profile passed with three cold runs per bundled
+sample:
+
+| Language | Duration | Median total | Avg transcribe | RTF | WER | CER | Avg peak RSS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| EN | 179.810 s | 34.251 s | 12.093 s | 0.0673 | 0.0628 | 0.0577 | 592.745 MiB |
+| RU | 298.120 s | 45.987 s | 32.561 s | 0.1092 | 0.0650 | 0.0426 | 640.901 MiB |
+
+Evidence: `evidence/2026-09-01/podlodka.json`; command:
+`HF_HOME=/Volumes/512GB/hf HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 uv run
+stt-benchmark benchmark --profile podlodka --runs 3`. All rows succeeded
+(`3/3`), with no skipped rows.
+
+Commit: not created (user requested no commit).
 
 ## User Prerequisite
 
@@ -528,8 +842,9 @@ Observations:
   for 20s audio — MLX decoder is not optimized for Apple Silicon here.
 - Official CTC and official RNNT give identical RU transcripts.
 - EN capability probe (LibriSpeech first 20s): all four produce near-identical
-  garbage (Russian-only model). Minor word-level deltas exist but none are
-  usable; GigaAM is RU-only for benchmark purposes.
+  garbage (the tested GigaAM-v3 model is Russian-only). Minor word-level deltas
+  exist but none are usable; this v3 integration is RU-only for benchmark
+  purposes.
 
 Measurements (RU 20s chunk, M1 Max, MPS):
 
@@ -559,8 +874,9 @@ Decisions:
 - D-006: GigaAM MLX (aystream) is RU-transcript-parity with official but
   ~6-13x slower inference on M1 Max. Include as a "portability" backend
   only if the user wants it; otherwise mark `skipped` by default with a note.
-- GigaAM is RU-only. EN rows will report `skipped (ru-only model)` and not
-  count against EN success criteria.
+- The tested GigaAM-v3 variants are RU-only. Their EN rows will report
+  `skipped (ru-only model)` and not count against EN success criteria. This does
+  not apply to the separate GigaAM Multilingual integration in T0.9.
 
 Consequences for downstream tasks:
 - N2-N5 (GigaAM normalizer): numeric normalization is the dominant error.
@@ -570,7 +886,7 @@ Consequences for downstream tasks:
 - Backends to implement: `gigaam_ctc` (official), `gigaam_rnnt` (official),
   `gigaam_mlx_ctc`, `gigaam_mlx_rnnt`. Each resolves its snapshot via S1
   local-path logic.
-- Isolated env required for official GigaAM (torch 2.8.0 + transformers
+- Isolated env required for official GigaAM-v3 (torch 2.8.0 + transformers
   4.57.1 + pyannote-audio 4.0.0); cannot share the main `.venv`. Worker
   isolation (S5) must support per-backend venv.
 - `transcribe` (short-form) used; long audio handled by chunking in the
@@ -579,8 +895,8 @@ Consequences for downstream tasks:
 
 Result: all four variants produce identical RU transcripts. Official CTC and
 RNNT are fast (RTFx 4.8-7.0) and accurate; MLX variants are RU-parity but
-~36s/20s audio (impractical). GigaAM is RU-only. Numeric normalization is the
-primary WER driver. Proceed to S4E/S4.
+~36s/20s audio (impractical). The tested GigaAM-v3 variants are RU-only.
+Numeric normalization is the primary WER driver. Proceed to S4E/S4.
 
 ### - [x] S4 Parakeet runtimes
 
@@ -936,16 +1252,25 @@ Result: subprocess isolation chosen for all backends. Cold RTFx is the
 published metric; warm is optional. ±15% tolerance. Per-backend venv
 supported via subprocess. D-003 CLOSED.
 
-### - [ ] S6 Qwen3-ASR runtimes
+### - [x] S6 Qwen3-ASR runtimes
 
-Status: READY. Owner: agent. Priority: P1. Depends on: U1, S1, S5.
+Status: DONE. Owner: agent. Priority: P2. Depends on: U1, S1, S5.
 
-Probe official HF and MLX 8-bit on EN/RU. Forced aligner excluded.
+The 0.6B 8-bit MLX path is already implemented by T0.8. In L4, probe the exact
+cached official HF model and the 1.7B variant on EN/RU, then compare them with
+the existing MLX row. Record memory fit on the M1 Max, deterministic decoding,
+local snapshot provenance and dependency isolation. Do not mix ForcedAligner
+into these ASR timings; alignment is a separate L5 profile.
 
-DoD: both have metrics/dependencies/status; N9/N10 updated; commit
-`docs: record qwen asr spike`.
+DoD: official and 1.7B variants have metrics/dependencies/status or a
+reproducible blocker; existing 0.6B MLX evidence is reused rather than rerun as
+a new integration task; N9 and the L4 roadmap are updated.
 
-Result: TBD.
+Result: the separate `qwen` profile now covers MLX 0.6B 8-bit, MLX 1.7B
+8-bit and official HF 1.7B on EN/RU. Official HF uses Transformers 5.13 and
+deterministic 30-second chunks; ForcedAligner remains separate. Metrics and
+the long-audio fix are recorded in `RESULTS.md` and
+`evidence/2026-09-01/qwen.json`.
 
 ### - [x] S7 Canary runtimes
 
@@ -1047,17 +1372,178 @@ required and documented.
 
 ### - [ ] S8 Corpus
 
-Status: READY. Owner: agent. Priority: P1.
+Status: READY. Owner: agent. Priority: P2.
 
-Research clean, long, noise, telephone, multi-speaker, names/numbers and
-code-switching EN/RU sources, licenses and reference quality.
+Do not build a corpus platform before the benchmark report exists. Verify the
+two bundled EN/RU samples, attribution and reference transcripts first. Add at
+most one licensed long-form or multi-speaker sample when VibeVoice-ASR rich
+transcription is integrated; add noise, telephone, names/numbers and broader
+code-switching sets only after a concrete reporting need.
 
-DoD: selected sources/licenses and exact manifest/profile sizes recorded; I6
-updated; commit `docs: record benchmark corpus spike`.
+DoD: the fixed-corpus report lists exact files, duration, language, source,
+license and reference provenance. Any rich-ASR sample has the same metadata.
+No generalized profile/normalizer framework is required.
 
 Result: TBD.
 
+## Active Lean Roadmap
+
+This section is the executable plan. It supersedes the original framework-first
+order in M2-M5 while preserving those task descriptions as historical backlog.
+
+Rules:
+
+- use the existing CLI, `RunResult`, JSON output and subprocess runner;
+- add one thin worker or sibling configuration per concrete runtime;
+- resolve exact local snapshots and prohibit hidden downloads;
+- require focused contract tests plus a real offline smoke;
+- publish fixed-corpus observations, not universal rankings;
+- do not introduce a registry, schema migration, report framework or corpus
+  platform without repeated concrete need.
+
+### - [x] L0 Validate and publish the current baseline
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: T0.10.
+
+Work:
+
+- review the current modified and untracked implementation without reverting
+  unrelated changes;
+- run the complete unit/contract suite and `git diff --check`;
+- run `main` on RU for three isolated runs;
+- run `main --audio en` for three isolated runs, preserving honest RU-only
+  skips;
+- run `podlodka` on both bundled samples for three isolated runs;
+- write results under ignored `output/` and record the exact commands.
+
+DoD: every current ready row either succeeds or has a recorded skip/blocker;
+JSON includes commands, machine metadata, WER/CER, cold total, load,
+transcription time, RTF and peak RSS. No commit unless explicitly requested.
+
+### - [x] L1 Integrate official Whisper.cpp quantization rows
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: L0, S2.
+
+Use one thin official `whisper-cli` subprocess path for FP16, Q5 and Q8. Reuse
+the S2 decisions and cached artifacts; do not use `pywhispercpp` or Core ML.
+Record CLI version, Metal use, exact filename, file size, quantization, cold
+process time, EN/RU WER/CER, RTF and RSS. Compare Q5/Q8 with the same-model FP16
+baseline.
+
+DoD: focused tests, offline EN/RU smoke and repeated rows pass; no generalized
+backend abstraction is introduced.
+
+### - [x] L2 Integrate the useful Parakeet rows
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: L0, S4, S4E.
+
+Required rows:
+
+- official HF reference;
+- Sherpa-ONNX FP32 from the pinned official `.nemo` export;
+- Sherpa-ONNX INT8 from the same export.
+
+MLX BF16 is included only if Apple-native runtime comparison is required for
+the report. ONNX-ASR FP32/INT8 is included only if comparing ONNX front ends is
+an explicit objective. Third-party Sherpa artifacts remain superseded.
+
+Parakeet Sherpa FP16 is `BLOCKED`: six conversion approaches produced internal
+ONNX Cast/type conflicts. Reopen only for an official/native FP16 export,
+upstream exporter fix or compatible ONNX Runtime support.
+
+DoD: selected rows pass offline EN/RU smoke and repeated measurement; source
+revision, exporter revision, dtype, file size, WER/CER, RTF and RSS are
+recorded. FP16 is shown as blocked rather than omitted silently.
+
+### - [x] L3 Add small high-value comparisons
+
+Status: DONE. Owner: agent. Priority: P1. Depends on: L0.
+
+Add only:
+
+- official GigaAM-v3 CTC beside the existing official RNNT row;
+- Vosk small RU beside the existing full Zipformer2 ONNX row.
+
+Do not add GigaAM-v3 MLX CTC/RNNT to the default report: S3 already established
+transcript parity and impractical speed. Do not reimplement the existing full
+Vosk row. Clarify in names/documentation that the current Vosk-named backend is
+Sherpa-ONNX Zipformer2, not the classic Vosk API.
+
+DoD: sibling configurations reuse current workers where possible; RU smoke,
+three-run metrics and model-size deltas are recorded.
+
+### - [x] L4 Add modern extended models
+
+Status: DONE WITH BLOCKER. Owner: agent. Priority: P1. Depends on: L0, U1.
+
+Read-only canonical-cache inspection on 2026-09-01 found all required model
+families locally; no download is needed:
+
+- `mlx-community/Qwen3-ASR-1.7B-8bit`, snapshot `a8379a2e...`;
+- `Qwen/Qwen3-ASR-1.7B-hf`, snapshot `bcd2b5b7...`;
+- `ai-babai/gigaam-multilingual-mlx`, snapshot `2532f202...`;
+- `microsoft/VibeVoice-ASR-HF`, snapshot `f22241c2...`;
+- `Vikhrmodels/Borealis-5b-it`, snapshot `66e8899f...`.
+
+The remaining gates are runtime isolation, memory fit, output-contract handling
+and Borealis remote-code/dependency review. The agent must continue to pass
+exact local paths and prohibit implicit network access.
+
+Required extended rows:
+
+1. Qwen3-ASR 1.7B: compare with the existing 0.6B 8-bit MLX row; record memory
+   fit, deterministic decoding and official-vs-MLX differences.
+2. GigaAM Multilingual MLX: compare the same model family with official
+   `large_ctc`; record transcript parity, speed and RSS.
+3. VibeVoice-ASR: create a separate long-form profile. Publish
+   `transcription_only` WER/CER separately from rich Who/When/What output;
+   diarization and timestamp capabilities must not alter plain-ASR timing.
+4. Borealis: create an experimental RU Audio-LLM profile. Pin remote code and
+   every Whisper/Qwen dependency to local paths, review pickle/custom code,
+   disable sampling and record deterministic generation settings.
+
+DoD: each available model has exact provenance, dependency isolation, memory
+fit and real offline smoke, or a specific blocker. Different output contracts
+remain in separate profiles.
+
+### - [ ] L5 Optional runtime parity and alignment
+
+Status: READY. Owner: agent. Priority: P2. Depends on: L0. Optional; does not
+block L6.
+
+- Podlodka MLX: add only for same-weights runtime parity using a verified
+  published conversion. Do not create a custom conversion in the lean path.
+- Classic Vosk: add only with a genuine classic Vosk model package in the
+  canonical cache; keep it separate from the current Zipformer2 ONNX backend.
+- ForcedAligner: benchmark as a second-stage alignment profile with separate
+  latency, memory and timestamp-quality fields. Never add its cost to the base
+  Qwen ASR row.
+
+These tasks do not block the final report.
+
+### - [x] L6 Assemble and verify the final report
+
+Status: DONE. Owner: agent. Priority: P0. Depends on: L0-L4.
+
+Use the existing JSON as the source of truth. Produce compact tables for:
+
+- model/runtime, exact revision, language, license, dtype/quantization and disk
+  size;
+- WER/CER;
+- cold total, load, transcription time and RTF;
+- peak RSS;
+- quantized-vs-unquantized deltas;
+- failures, skips, blockers and experimental warnings.
+
+Do not build generalized Pareto classes, a database or a replacement result
+schema. Final acceptance requires the full test suite, offline smoke for every
+published row, valid JSON, no network downloads, current documentation and
+`git diff --check`.
+
 ## M2: Foundation
+
+Status: SUPERSEDED by the Active Lean Roadmap. Retained for historical context;
+I1-I7 are not active tasks.
 
 ### - [ ] I1 Minimal backend contract
 
@@ -1145,6 +1631,8 @@ Result: TBD.
 
 ## M3: Measurement and Corpus
 
+Status: SUPERSEDED by L0, L2 and L6. Retained for historical context.
+
 ### - [ ] I5 Reporting
 
 RED fixtures for common table, Pareto, same-weights, model-family,
@@ -1194,6 +1682,9 @@ Result: TBD.
 
 ## M4: New Benchmark Configurations
 
+Legacy task index. Execute only the rows selected by L1-L5 and in that order;
+unchecked rows are not automatically part of the active roadmap.
+
 Each: RED fake contract -> GREEN adapter -> RED cached integration -> GREEN real
 invocation -> VERIFY -> REFACTOR. Agent never downloads missing models.
 
@@ -1228,8 +1719,9 @@ DoD: separate row; RU smoke; provenance; commit `feat: add gigaam rnnt mlx backe
 ### - [ ] N4 GigaAM CTC official
 DoD: PyTorch row; parity evidence; RU smoke; commit `feat: add official gigaam ctc backend`. Result: TBD.
 
-### - [ ] N5 GigaAM RNNT official
-DoD: PyTorch row; parity evidence; RU smoke; commit `feat: add official gigaam rnnt backend`. Result: TBD.
+### - [x] N5 GigaAM RNNT official
+DoD: PyTorch row; parity evidence; RU smoke. Result: DONE by T0.5 through the
+current `gigaam` / `e2e_rnnt` pair.
 
 ### - [ ] N6 Parakeet official
 DoD: official row; EN/RU smoke; timestamps/provenance; commit `feat: add official parakeet backend`. Result: TBD.
@@ -1244,6 +1736,9 @@ checksums and manifest validated; EN/RU smoke and parity vs N6 recorded; commit
 `feat: add parakeet sherpa onnx backend`. Result: TBD.
 
 ### - [ ] N8.2 Parakeet sherpa-onnx FP16
+Status: BLOCKED by D-008/S4E. Six conversion approaches fail at ONNX Runtime
+load because of internal Cast/type conflicts. Reopen only for an upstream or
+native FP16 export path.
 DoD: I7 `fp16/` artifacts have all encoder/decoder/joiner weights FP16 with
 compatible public IO; EN/RU smoke; size/RAM/RTFx and WER/CER delta vs N8; commit
 `feat: add parakeet sherpa fp16 config`. Result: TBD.
@@ -1264,11 +1759,14 @@ DoD: only `.int8.onnx` encoder/decoder-joint files are loaded; no FP32 fallback;
 EN/RU smoke; provider, size/RAM/RTFx and WER/CER delta vs N8.1 recorded;
 commit `feat: add parakeet onnx asr int8 config`. Result: TBD.
 
-### - [ ] N9 Qwen3-ASR official
-DoD: S6 details applied; EN/RU smoke; memory fit; commit `feat: add official qwen3 asr backend`. Result: TBD.
+### - [x] N9 Qwen3-ASR official
+DoD: S6 details applied; EN/RU smoke; memory fit. Result: DONE through the
+`qwen3-asr-hf` / `qwen3-asr-1.7b-hf` row. ForcedAligner is excluded.
 
-### - [ ] N10 Qwen3-ASR MLX
-DoD: S6 details applied; EN/RU smoke; parity; commit `feat: add qwen3 asr mlx backend`. Result: TBD.
+### - [x] N10 Qwen3-ASR MLX
+DoD: S6 details applied; EN/RU smoke; parity. Result: DONE by T0.8 through the
+current `qwen3-asr` / `qwen3-asr-0.6b-8bit` pair; official and 1.7B work remains
+complete in S6/L4 through the separate `qwen` profile.
 
 ### - [ ] N11 Canary official
 DoD: S7 details applied; EN/RU smoke; memory fit; commit `feat: add official canary backend`. Result: TBD.
@@ -1276,13 +1774,18 @@ DoD: S7 details applied; EN/RU smoke; memory fit; commit `feat: add official can
 ### - [ ] N12 Canary MLX
 DoD: S7 details applied; EN/RU smoke; parity; commit `feat: add canary mlx backend`. Result: TBD.
 
-### - [ ] N13 Vosk small RU
-DoD: CPU RU smoke; timestamps/memory/footprint; commit `feat: add vosk small ru backend`. Result: TBD.
+### - [x] N13 Vosk small RU
+DoD: CPU RU smoke; timestamps/memory/footprint. Result: DONE through
+`vosk-small-ru`; three-run comparison is recorded in `RESULTS.md`.
 
-### - [ ] N14 Vosk full RU
-DoD: CPU RU smoke; comparison with N13; commit `feat: add vosk full ru backend`. Result: TBD.
+### - [x] N14 Vosk full RU
+DoD: CPU RU smoke; comparison with N13. Result: DONE by T0.7 through the current
+full Zipformer2 ONNX model. N13 remains the missing small-model comparison.
 
 ## M5: Operations and Documentation
+
+Status: SUPERSEDED as a release prerequisite. Add individual operational tools
+only after a concrete need; L6 owns the lean report and acceptance checks.
 
 ### - [ ] C1 Add `stt-benchmark doctor`
 DoD: RED volume/cache/dependency/hardware tests; no downloads; actionable output; commit `feat: add benchmark doctor command`. Result: TBD.
@@ -1323,8 +1826,10 @@ Result: TBD.
 
 ## Next Action
 
-1. Commit this file as `docs: add benchmark improvement tasks`.
-2. Record commit hash in Change Log on T0.1 commit.
-3. Execute T0.1, then T0.2, then T0.3.
-4. Wait for user confirmation of U1.
-5. Execute S1 and stop at plan update gate.
+1. Decide whether to cache Borealis dependencies `openai/whisper-large-v3` and
+   `Qwen/Qwen3-4B`; Borealis remains blocked until both are local.
+2. Run optional L5 only when same-weights Podlodka MLX, classic Vosk or
+   ForcedAligner comparison is explicitly needed.
+3. Commit or release the completed lean critical-path changes only when
+   explicitly requested; the current worktree intentionally remains
+   uncommitted.
