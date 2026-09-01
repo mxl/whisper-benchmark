@@ -1,0 +1,12 @@
+# Official T-one source, pinned to the benchmarked commit.
+tone @ git+https://github.com/voicekit-team/T-one.git@3c5b6c015038173840e62cea99e10cdb1c759116
+
+# Dependency ranges from the official pyproject.toml at that commit.
+numpy>=1.17.3,<3.0.0
+huggingface-hub>=0.14.0,<1.0.0
+onnxruntime>=1.12.0,<2.0.0
+pyctcdecode>=0.2.0,<1.0.0
+kenlm>=0.2.0,<1.0.0
+
+# Needed by read_audio; this is part of the official demo extra.
+miniaudio>=1.50,<2.0

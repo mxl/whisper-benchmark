@@ -1,0 +1,8 @@
+# Runtime for the cached Zipformer2 ONNX transducers, not classic Vosk.
+sherpa-onnx==1.13.6
+
+# Match the range already used by the repository's isolated T-one ONNX environment.
+numpy>=1.17.3,<3.0.0
+
+# Match the repository's current isolated audio-runtime pin.
+soundfile==0.14.0

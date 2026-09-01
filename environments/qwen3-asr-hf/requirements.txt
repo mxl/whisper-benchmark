@@ -1,0 +1,6 @@
+# Official Qwen3-ASR-1.7B through the native Transformers API.
+transformers>=5.13,<5.14
+torch>=2.10,<2.11
+soundfile>=0.13,<1
+scipy>=1.15,<2
+librosa>=0.11,<1

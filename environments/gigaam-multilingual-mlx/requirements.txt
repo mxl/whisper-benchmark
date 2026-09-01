@@ -1,0 +1,7 @@
+# Isolated Apple Silicon runtime for the GigaAM Multilingual MLX worker.
+gigaam-multilingual-mlx==0.2.0
+mlx>=0.32,<0.33
+huggingface-hub>=0.34,<2
+numpy>=2.3,<3
+psutil>=7,<8
+# ffmpeg is an executable dependency used by the package's official audio loader.

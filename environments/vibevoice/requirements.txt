@@ -1,0 +1,6 @@
+# Official Microsoft VibeVoice-ASR through the native Transformers 5.9 API.
+transformers==5.9.0
+torch>=2.10,<2.11
+soundfile>=0.13,<1
+scipy>=1.15,<2
+librosa>=0.11,<1

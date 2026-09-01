@@ -26,7 +26,13 @@ CommandMain = Callable[[list[str] | None], int]
 
 
 COMMAND_HELP: dict[str, str] = {
-    "benchmark": "Run the benchmark across selected speech-to-text engines.",
+    "benchmark": (
+        "Run the six-pair Russian MLX Whisper + GigaAM-v3 + GigaAM Multilingual + "
+        "T-one + Vosk + Qwen3-ASR profile by default; use --profile whisper for "
+        "all current Whisper runtimes, or select a focused profile such as "
+        "podlodka, whisper-cpp, parakeet, ru-variants, qwen, "
+        "gigaam-multilingual, or vibevoice."
+    ),
     "download-models": "Download model files for supported engines.",
     "prepare-samples": "Download and prepare benchmark audio samples.",
     "smoke-test": "Run a quick benchmark smoke test.",
@@ -53,7 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     for command, help_text in COMMAND_HELP.items():
-        subparsers.add_parser(command, help=help_text, description=help_text)
+        subparsers.add_parser(
+            command,
+            help=help_text,
+            description=help_text,
+            add_help=False,
+        )
 
     return parser
 

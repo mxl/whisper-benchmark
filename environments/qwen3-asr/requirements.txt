@@ -1,0 +1,8 @@
+# No additional packages are required for Qwen3-ASR.
+#
+# Use the repository's existing environment from pyproject.toml, which already
+# provides mlx-audio and mlx. Do not create a separate venv or duplicate those
+# dependencies here.
+#
+# The deferred Transformers-native integration would require transformers>=5.13;
+# it is not part of this MLX worker and is intentionally not pinned here.

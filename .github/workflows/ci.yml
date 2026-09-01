@@ -28,4 +28,4 @@ jobs:
         run: uv sync
 
       - name: Run unit tests
-        run: .venv/bin/python -m unittest test_benchmark -v
+        run: .venv/bin/python -m unittest discover -v
